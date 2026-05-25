@@ -41,6 +41,7 @@ let tickerHandle = null;
 let customSetupDone = false;     // true once Claude has returned an initial board for custom variant
 let customSetupBoard = null;     // cached board from setup, applied when Start game clicked
 let customSetupGameInfo = "";    // cached gameInfo from setup
+let customSetupInputMode = "drops"; // cached input mode from setup ("drops" | "cells" | "both")
 
 const VARIANT_NAMES = {
   classic: "Classic Connect 4",
@@ -99,6 +100,7 @@ function newGame() {
     timeClaude: TIME_PER_PLAYER_MS,
     turnStart: Date.now(),
     started: true,
+    customInputMode: "drops",  // custom variant default: top drop arrows only; Claude can override per-response
   };
   thinkingEl.textContent = "";
   thinkingEl.classList.add("empty");
@@ -318,7 +320,15 @@ function render() {
 
   const moves = state.variant === "custom" ? null : legalMoves();
   const isSupported = (edge, internalIdx) => {
-    if (state.variant === "custom") return false;
+    if (state.variant === "custom") {
+      // Custom default: only TOP drop arrows are active (Connect-4 style). Claude
+      // can flip to cell-clicking via inputMode in its response.
+      const mode = state.customInputMode || "drops";
+      if (mode !== "drops" && mode !== "both") return false;
+      if (edge !== "top") return false;
+      const cell = state.board[0] && state.board[0][internalIdx];
+      return cell === 0 || cell == null;
+    }
     if (!moves) return false;
     const asLetter = colName(internalIdx);
     const asRowNum = parseInt(rowName(internalIdx), 10);
@@ -387,7 +397,11 @@ function render() {
       }
       if (state.winningCells.some(([wr, wc]) => wr === br && wc === bc)) cell.classList.add("win");
       const isEmpty = (v === 0 || v === null || v === undefined);
-      if (state.variant === "custom" && isEmpty && interactive) {
+      const customMode = state.customInputMode || "drops";
+      const cellsClickable = state.variant === "custom"
+        && (customMode === "cells" || customMode === "both")
+        && isEmpty && interactive;
+      if (cellsClickable) {
         cell.classList.add("clickable");
         cell.addEventListener("click", () => onCustomCellClick(br, bc));
       }
@@ -746,6 +760,9 @@ async function requestClaudeCustomMove(humanMove) {
     return;
   }
   state.board = result.newBoard;
+  if (typeof result.inputMode === "string" && ["drops", "cells", "both"].includes(result.inputMode)) {
+    state.customInputMode = result.inputMode;
+  }
   if (result.gameInfo) {
     gameInfoEl.hidden = false;
     gameInfoEl.innerHTML = result.gameInfo;
@@ -1005,9 +1022,14 @@ async function runCustomSetup() {
   // Cache for when user clicks Start game.
   customSetupBoard = result.newBoard;
   customSetupGameInfo = result.gameInfo || "";
+  customSetupInputMode = (typeof result.inputMode === "string"
+    && ["drops", "cells", "both"].includes(result.inputMode))
+    ? result.inputMode
+    : "drops";
   customSetupDone = true;
   // Show the initialized board immediately so the user can see what they're starting from.
   state.board = customSetupBoard;
+  state.customInputMode = customSetupInputMode;
   if (customSetupGameInfo) {
     gameInfoEl.hidden = false;
     gameInfoEl.innerHTML = customSetupGameInfo;
@@ -1049,6 +1071,7 @@ function initBoard() {
     timeClaude: TIME_PER_PLAYER_MS,
     turnStart: Date.now(),
     started: false,
+    customInputMode: "drops",
   };
   thinkingEl.textContent = "Press Start game to begin.";
   thinkingEl.classList.add("empty");

@@ -187,18 +187,25 @@ YOU CONTROL THE GAME — you decide:
      - Mine: { owner: 0, glyph: "✦", color: "#444", title: "Mine — triggers if stepped on" } (owner 0 = neutral/board-owned)
    - The glyph appears centered in the cell. color overrides the cell background (use sparingly — only when the meaning needs to be visually distinct from a plain piece).
 
-3. **Move semantics.** Human submits free-form text moves — examples:
-   - { "cell": "D3" } when they just click a cell
-   - { "text": "use exploding tile at C2" } when they type
+3. **Move semantics.** Human input arrives in one of three shapes:
+   - { "edge": "top", "column": "D" } — they clicked a TOP DROP arrow (default UI). Interpret as a Connect-4-style column drop UNLESS your rules say otherwise.
+   - { "cell": "D3" } — they clicked a specific cell (only available if you switched UI to cell-mode).
+   - { "text": "use exploding tile at C2" } — they typed in the action bar.
    You interpret and validate under YOUR rules. If illegal, set illegal=true with an explanation in message.
 
-4. **Persistent UI state.** Use gameInfo to surface anything that doesn't fit on the board — counters, resources, ability status, win conditions, current phase, etc. Examples:
+4. **UI input mode.** You control how the human can input moves via the `inputMode` field in your response:
+   - "drops" (DEFAULT) — top drop arrows are clickable, cells are NOT. Standard Connect-4 feel. Use this unless your rules need something different.
+   - "cells" — top arrows hidden, cells clickable. Use when placement is mid-board, free-positioning, etc.
+   - "both" — both work. Useful when some moves are drops and others are special placements.
+   If you omit inputMode, the previous value persists (default starts as "drops"). The text-input action bar is ALWAYS available regardless of mode.
+
+5. **Persistent UI state.** Use gameInfo to surface anything that doesn't fit on the board — counters, resources, ability status, win conditions, current phase, etc. Examples:
    - "<strong>You:</strong> 2 bombs · 1 shield<br><strong>Claude:</strong> 1 bomb · 2 shields"
    - "<strong>Phase:</strong> Placement (3 moves left), then Combat begins"
    - "<strong>Score:</strong> You 14 · Claude 11. First to 25 wins."
    Plain text or simple inline HTML (<strong>, <em>, <code>, <br>, <span>). Omit if not needed.
 
-5. **The game flow.** When you respond, in order:
+6. **The game flow.** When you respond, in order:
    - Validate the user's move under the rules.
    - If legal, apply it.
    - Check for human-win / draw / continue.
@@ -221,7 +228,8 @@ RESPONSE — at the END of your response, output exactly one JSON code block:
   "claudeMove": <string or object describing your move, or null>,
   "gameStatus": "continue" | "human_wins" | "claude_wins" | "draw",
   "message": "<short status-bar note for the human>",
-  "gameInfo": "<OPTIONAL HTML panel above the board — omit if not needed>"
+  "gameInfo": "<OPTIONAL HTML panel above the board — omit if not needed>",
+  "inputMode": "drops" | "cells" | "both"   // OPTIONAL — omit to keep current; default is "drops"
 }
 \`\`\`
 
