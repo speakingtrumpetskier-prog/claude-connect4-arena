@@ -291,7 +291,7 @@ export default async function handler(req) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 6000,
+      max_tokens: 2000,
       stream: true,
       thinking: { type: "adaptive", display: "summarized" },
       output_config: { effort },
