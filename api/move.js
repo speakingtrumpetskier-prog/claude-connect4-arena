@@ -108,7 +108,7 @@ function timeControlBlock(body) {
   return [
     `Time control: ${perMove} seconds per move (the clock resets at the start of each turn).`,
     `Your remaining time for THIS move: ${yourSec}s.`,
-    yourSec < 30
+    yourSec < 20
       ? "Your clock is LOW for this move — prefer a fast, solid move over deep analysis."
       : "Use whatever depth the position warrants — you have plenty of time for this move.",
   ].join("\n");
@@ -227,9 +227,9 @@ export default async function handler(req) {
   let effort = requestedEffort;
   let effortNote = null;
   if (tcMs !== null) {
-    const cap = tcMs < 15000 ? "low"
-              : tcMs < 30000 ? "medium"
-              : tcMs < 60000 ? "high"
+    const cap = tcMs < 10000 ? "low"
+              : tcMs < 20000 ? "medium"
+              : tcMs < 40000 ? "high"
               : null;
     if (cap && VALID_EFFORTS.indexOf(cap) < VALID_EFFORTS.indexOf(requestedEffort)) {
       effort = cap;

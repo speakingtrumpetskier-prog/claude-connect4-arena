@@ -28,7 +28,7 @@ const timerClaudeEl = $("#timer-claude");
 const timerHumanClock = timerHumanEl.querySelector(".clock");
 const timerClaudeClock = timerClaudeEl.querySelector(".clock");
 
-const TIME_PER_PLAYER_MS = 90 * 1000;
+const TIME_PER_PLAYER_MS = 60 * 1000;
 let tickerHandle = null;
 
 const VARIANT_NAMES = {
