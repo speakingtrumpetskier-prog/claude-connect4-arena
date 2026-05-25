@@ -15,7 +15,8 @@ const logEl = $("#log");
 const variantSel = $("#variant");
 const flipNWrap = $("#flip-n-wrap");
 const flipNInput = $("#flip-n");
-const effortInput = $("#effort");
+// Reasoning effort is hardcoded server-side (defaults to "low") — UI control removed.
+const effortInput = { value: "low" };
 const firstSel = $("#first");
 const newGameBtn = $("#new-game");
 const customWrap = $("#custom-rules-wrap");
