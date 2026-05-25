@@ -86,6 +86,22 @@ RULES — GRAVITY FLIP:
   return base;
 }
 
+function timeControlBlock(body) {
+  if (typeof body.timeClaudeMs !== "number" || typeof body.timeHumanMs !== "number") return null;
+  const total = Math.round((body.timePerPlayerMs || 90000) / 1000);
+  const yourSec = Math.max(0, Math.round(body.timeClaudeMs / 1000));
+  const oppSec = Math.max(0, Math.round(body.timeHumanMs / 1000));
+  return [
+    `Time control: chess clock, ${total} seconds total per player across the whole game.`,
+    `Your remaining clock: ${yourSec}s. Opponent's remaining clock: ${oppSec}s.`,
+    yourSec < 30
+      ? "Your clock is LOW — prefer a fast, solid move over deep analysis. Don't spend time on lines you don't need to explore."
+      : oppSec < 30
+        ? "Opponent's clock is low. Lines that force them to find a precise response may be favorable."
+        : "Both clocks are healthy; use whatever depth the position warrants.",
+  ].join("\n");
+}
+
 function userMessageForVariant(variant, body) {
   const { board, history, moveCount, gravityIdx, flipN } = body;
   const parts = [];
@@ -101,6 +117,8 @@ function userMessageForVariant(variant, body) {
   } else {
     parts.push("No moves yet.");
   }
+  const tc = timeControlBlock(body);
+  if (tc) parts.push(tc);
   parts.push("It is YOUR turn. Reason about the best move, then output it as the JSON block described.");
   return parts.join("\n\n");
 }
@@ -141,15 +159,18 @@ Reason carefully and show your reasoning in the thinking block before committing
 
 function customUserMessage(body) {
   const { board, history, humanMove } = body;
-  return [
+  const parts = [
     "Current board (BEFORE human's proposed move):",
     "```\n" + describeBoard(board) + "\n```",
     "Human's proposed move: " + JSON.stringify(humanMove),
     history && history.length
       ? "History so far:\n" + history.map((h, i) => `  ${i + 1}. ${h.player === 1 ? "Human" : "Claude"}: ${JSON.stringify(h.move)}`).join("\n")
       : "No moves yet.",
-    "Validate the human's move under the rules, then make YOUR move if the game continues. Return the JSON block described.",
-  ].join("\n\n");
+  ];
+  const tc = timeControlBlock(body);
+  if (tc) parts.push(tc);
+  parts.push("Validate the human's move under the rules, then make YOUR move if the game continues. Return the JSON block described.");
+  return parts.join("\n\n");
 }
 
 export default async function handler(req) {
@@ -178,8 +199,26 @@ export default async function handler(req) {
   catch { return new Response("Bad JSON", { status: 400 }); }
 
   const variant = body.variant || "classic";
-  const VALID_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
-  const effort = VALID_EFFORTS.has(body.effort) ? body.effort : "medium";
+  const VALID_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+  const requestedEffort = VALID_EFFORTS.includes(body.effort) ? body.effort : "medium";
+
+  // Auto-downshift effort when Claude's clock is low, so a single API call can't
+  // blow the remaining time. Without this cap, a high/max-effort call on a low
+  // clock would deterministically time Claude out.
+  const tcMs = typeof body.timeClaudeMs === "number" ? body.timeClaudeMs : null;
+  const thMs = typeof body.timeHumanMs === "number" ? body.timeHumanMs : null;
+  let effort = requestedEffort;
+  let effortNote = null;
+  if (tcMs !== null) {
+    const cap = tcMs < 15000 ? "low"
+              : tcMs < 30000 ? "medium"
+              : tcMs < 60000 ? "high"
+              : null;
+    if (cap && VALID_EFFORTS.indexOf(cap) < VALID_EFFORTS.indexOf(requestedEffort)) {
+      effort = cap;
+      effortNote = `auto-capped from "${requestedEffort}" to "${cap}" due to low clock`;
+    }
+  }
 
   let system, userMsg;
   if (variant === "custom") {

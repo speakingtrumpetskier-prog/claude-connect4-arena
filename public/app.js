@@ -568,6 +568,9 @@ async function requestClaudeMove() {
     flipN: state.flipN,
     gravityIdx: state.gravityIdx,
     effort: effortInput.value,
+    timeClaudeMs: state.timeClaude,
+    timeHumanMs: state.timeHuman,
+    timePerPlayerMs: TIME_PER_PLAYER_MS,
   };
 
   let finalText = "";
@@ -618,6 +621,9 @@ async function requestClaudeCustomMove(humanMove) {
     history: state.history,
     humanMove,
     effort: effortInput.value,
+    timeClaudeMs: state.timeClaude,
+    timeHumanMs: state.timeHuman,
+    timePerPlayerMs: TIME_PER_PLAYER_MS,
   };
 
   let finalText = "";
