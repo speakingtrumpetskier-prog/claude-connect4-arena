@@ -140,10 +140,19 @@ main {
   min-width: 0;
 }
 .field[hidden] { display: none !important; }
+.field-wide { grid-column: span 2; }
 .field-label {
   font-size: 12px;
   color: var(--muted);
 }
+.field-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  margin: 6px 0 0;
+  font-style: italic;
+}
+.field-desc strong { font-style: normal; color: var(--text); font-weight: 500; }
 
 select, input[type="number"], textarea {
   background: var(--surface);

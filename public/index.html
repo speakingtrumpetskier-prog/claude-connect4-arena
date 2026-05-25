@@ -23,14 +23,15 @@
       <section class="section">
         <p class="section-label">Settings</p>
         <div class="controls">
-          <div class="field">
+          <div class="field field-wide">
             <label class="field-label" for="variant">Variant</label>
             <select id="variant">
               <option value="classic">Classic Connect 4</option>
               <option value="diagonal" selected>Diagonal Gravity</option>
-              <option value="flip">Gravity Flip</option>
+              <option value="flip">Gravity Rotate</option>
               <option value="custom">Custom Rules</option>
             </select>
+            <p id="variant-desc" class="field-desc"></p>
           </div>
 
           <div class="field" id="flip-n-wrap" hidden>

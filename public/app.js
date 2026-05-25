@@ -34,8 +34,15 @@ let tickerHandle = null;
 const VARIANT_NAMES = {
   classic: "Classic Connect 4",
   diagonal: "Diagonal Gravity",
-  flip: "Gravity Flip",
+  flip: "Gravity Rotate",
   custom: "Custom Rules",
+};
+
+const VARIANT_DESCRIPTIONS = {
+  classic: "<strong>Standard Connect 4.</strong> Drop a piece in any column from the top — it falls to the lowest empty cell. Four in a row (horizontal, vertical, or diagonal) wins.",
+  diagonal: "<strong>Gravity pulls down-and-right.</strong> Drop pieces from the top edge OR the left edge; each piece slides along the diagonal until it hits a wall or another piece. Four in a row still wins — but the geometry means top-left drops travel farthest, and the bottom-right corner fills first.",
+  flip: "<strong>Gravity rotates clockwise every N moves</strong> (down → left → up → right → down). All pieces re-settle each time it rotates, which can create or destroy threats overnight. The active drop edge moves with gravity. Plan for what the board will look like AFTER the next rotation, not just now.",
+  custom: "<strong>You write the rules; Claude enforces them and plays.</strong> Describe your variant in plain English in the box below. Claude validates each of your moves, makes its own move, and returns the new board. Looser correctness, maximum weirdness — try anything.",
 };
 
 // Chess-style notation: columns A..G (left → right), rows 1..6 (bottom → top).
@@ -319,7 +326,7 @@ function maybeFlipGravity() {
   if (state.moveCount > 0 && state.moveCount % state.flipN === 0) {
     state.gravityIdx = (state.gravityIdx + 1) % 4;
     settleAll(state.board, state.gravityIdx);
-    logAdd("system", `Gravity flipped → ${GRAVITY_VECTORS[state.gravityIdx].name}`);
+    logAdd("system", `Gravity rotated → ${GRAVITY_VECTORS[state.gravityIdx].name}`);
   }
 }
 
@@ -779,14 +786,21 @@ function parseCustomResult(text) {
 }
 
 // ---------- Wire up ----------
+function updateVariantDesc() {
+  const v = variantSel.value;
+  const el = document.querySelector("#variant-desc");
+  if (el) el.innerHTML = VARIANT_DESCRIPTIONS[v] || "";
+}
 variantSel.addEventListener("change", () => {
   flipNWrap.hidden = variantSel.value !== "flip";
   customWrap.hidden = variantSel.value !== "custom";
   variantNameEl.textContent = VARIANT_NAMES[variantSel.value] || variantSel.value;
+  updateVariantDesc();
 });
 newGameBtn.addEventListener("click", newGame);
 
 // Initial.
 flipNWrap.hidden = variantSel.value !== "flip";
 customWrap.hidden = variantSel.value !== "custom";
+updateVariantDesc();
 newGame();

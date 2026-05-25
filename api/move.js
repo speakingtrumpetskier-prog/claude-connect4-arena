@@ -78,10 +78,10 @@ RULES — DIAGONAL GRAVITY:
     const dropEdge = DROP_EDGES[g];
     const movesUntilFlip = opts.flipN - ((opts.moveCount || 0) % opts.flipN);
     return base + `
-RULES — GRAVITY FLIP:
+RULES — GRAVITY ROTATE:
 - Gravity has a direction that rotates clockwise (down → left → up → right → down)
   every ${opts.flipN} moves total (across both players).
-- Current gravity: ${g.toUpperCase()}. Drop edge: ${dropEdge}. Gravity flips in ${movesUntilFlip} move(s).
+- Current gravity: ${g.toUpperCase()}. Drop edge: ${dropEdge}. Gravity rotates in ${movesUntilFlip} move(s).
 - On your turn, place a piece on a cell of the drop edge that is currently empty.
   The piece then slides as far as possible along the current gravity direction
   (stopping at the wall or another piece).
