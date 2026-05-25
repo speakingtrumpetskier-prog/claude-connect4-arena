@@ -258,8 +258,9 @@ function render() {
   boardEl.style.gridTemplateRows = `repeat(${rows}, 56px)`;
 
   const moves = state.variant === "custom" ? null : legalMoves();
-  const canMove = (edge, index) => {
-    if (state.variant === "custom") return !state.gameOver && !state.pendingClaude && state.turn === 1;
+  // Is this drop position supported by the current variant + board state? (true = there's a legal move here for whichever player's turn)
+  const isSupported = (edge, index) => {
+    if (state.variant === "custom") return false; // custom uses cell clicks, not drops
     if (!moves) return false;
     return moves.some(m =>
       (edge === "top" && (m.column === index || (m.edge === "top" && m.index === index))) ||
@@ -270,6 +271,10 @@ function render() {
   };
 
   const interactive = !state.gameOver && !state.pendingClaude && state.turn === 1;
+  const dropStateFor = (edge, idx) => {
+    if (!isSupported(edge, idx)) return "unsupported";
+    return interactive ? "active" : "waiting";
+  };
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -287,26 +292,22 @@ function render() {
 
       if (isTopRow) {
         const idx = wantsSideDrop ? c - 1 : c;
-        const drop = makeDrop("top", idx, "▼", interactive && canMove("top", idx));
-        boardEl.appendChild(drop);
+        boardEl.appendChild(makeDrop("top", idx, "▼", dropStateFor("top", idx)));
         continue;
       }
       if (isBottomRow) {
         const idx = wantsSideDrop ? c - 1 : c;
-        const drop = makeDrop("bottom", idx, "▲", interactive && canMove("bottom", idx));
-        boardEl.appendChild(drop);
+        boardEl.appendChild(makeDrop("bottom", idx, "▲", dropStateFor("bottom", idx)));
         continue;
       }
       if (isLeftCol) {
         const idx = wantsTopDrop ? r - 1 : r;
-        const drop = makeDrop("left", idx, "▶", interactive && canMove("left", idx));
-        boardEl.appendChild(drop);
+        boardEl.appendChild(makeDrop("left", idx, "▶", dropStateFor("left", idx)));
         continue;
       }
       if (isRightCol) {
         const idx = wantsTopDrop ? r - 1 : r;
-        const drop = makeDrop("right", idx, "◀", interactive && canMove("right", idx));
-        boardEl.appendChild(drop);
+        boardEl.appendChild(makeDrop("right", idx, "◀", dropStateFor("right", idx)));
         continue;
       }
 
@@ -334,20 +335,76 @@ function render() {
     gravityIndicator.hidden = false;
     const g = GRAVITY_VECTORS[state.gravityIdx];
     const next = state.flipN - (state.moveCount % state.flipN);
-    gravityIndicator.textContent = `Gravity: ${g.name.toUpperCase()} — drop from ${g.dropEdge} — flips in ${next} move${next === 1 ? "" : "s"}`;
+    const arrowGlyph = { down: "↓", up: "↑", left: "←", right: "→" }[g.name];
+    gravityIndicator.innerHTML = "";
+    const wrap = document.createElement("span");
+    wrap.className = "gravity-arrow";
+    const arr = document.createElement("span");
+    arr.className = "arrow";
+    arr.textContent = arrowGlyph;
+    wrap.appendChild(arr);
+    const txt = document.createElement("span");
+    txt.textContent = `Gravity ${g.name} · flips in ${next} move${next === 1 ? "" : "s"}`;
+    wrap.appendChild(txt);
+    gravityIndicator.appendChild(wrap);
+  } else if (state.variant === "diagonal") {
+    gravityIndicator.hidden = false;
+    gravityIndicator.innerHTML = "";
+    const wrap = document.createElement("span");
+    wrap.className = "gravity-arrow";
+    const arr = document.createElement("span");
+    arr.className = "arrow";
+    arr.textContent = "↘";
+    wrap.appendChild(arr);
+    const txt = document.createElement("span");
+    txt.textContent = "Pieces slide down-right";
+    wrap.appendChild(txt);
+    gravityIndicator.appendChild(wrap);
   } else {
     gravityIndicator.hidden = true;
   }
 }
 
-function makeDrop(edge, index, arrow, enabled) {
+// `state`: "active" (clickable), "waiting" (legal but Claude's turn), "unsupported" (variant doesn't allow this edge/cell).
+function makeDrop(edge, index, arrow, dropState) {
   const el = document.createElement("div");
-  el.className = "drop" + (enabled ? "" : " disabled");
+  el.className = "drop " + dropState;
   el.textContent = arrow;
   el.dataset.edge = edge;
   el.dataset.index = index;
-  if (enabled) el.addEventListener("click", () => onDropClick(edge, index));
+  if (dropState === "active") {
+    el.addEventListener("click", () => onDropClick(edge, index));
+    el.addEventListener("mouseenter", () => showHoverPreview(edge, index));
+    el.addEventListener("mouseleave", clearHoverPreview);
+  }
   return el;
+}
+
+// ---------- Hover preview ----------
+let lastPreviewKey = null;
+function showHoverPreview(edge, index) {
+  // Compute where the piece would land using a board clone.
+  const clone = state.board.map(r => r.slice());
+  let move;
+  if (state.variant === "classic") move = { column: index };
+  else move = { edge, index };
+  let landed = null;
+  if (state.variant === "classic") landed = classicApply(clone, move, 1);
+  else if (state.variant === "diagonal") landed = diagonalApply(clone, move, 1);
+  else if (state.variant === "flip") landed = flipApply(clone, move, 1, state.gravityIdx);
+  if (!landed) return;
+  clearHoverPreview();
+  const key = `${landed.row},${landed.col}`;
+  lastPreviewKey = key;
+  const cell = boardEl.querySelector(`.cell[data-row="${landed.row}"][data-col="${landed.col}"]`);
+  if (cell && !cell.classList.contains("piece-human") && !cell.classList.contains("piece-claude")) {
+    cell.classList.add("ghost-human");
+  }
+}
+function clearHoverPreview() {
+  if (!lastPreviewKey) return;
+  boardEl.querySelectorAll(".cell.ghost-human").forEach(el => el.classList.remove("ghost-human"));
+  lastPreviewKey = null;
 }
 
 // ---------- Click handlers ----------

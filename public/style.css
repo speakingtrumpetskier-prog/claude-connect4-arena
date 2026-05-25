@@ -313,11 +313,45 @@ button:active { transform: translateY(1px); }
   border-radius: 6px;
   transition: color 100ms ease, background 100ms ease, transform 100ms ease;
 }
-.drop.disabled { pointer-events: none; opacity: 0; }
-.drop:hover {
+.drop.unsupported { pointer-events: none; opacity: 0; }
+.drop.waiting    { pointer-events: none; opacity: 0.22; }
+.drop:not(.unsupported):not(.waiting):hover {
   color: var(--red);
   background: rgba(232, 86, 85, 0.1);
   transform: scale(1.1);
+}
+
+/* Ghost preview piece — shown on drop-arrow hover */
+.cell.ghost-human {
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255,255,255,0.35), transparent 55%),
+    var(--red);
+  opacity: 0.32;
+  box-shadow: inset 0 0 0 2px var(--red-deep);
+}
+
+/* Big gravity-direction badge for the Flip variant */
+.gravity-arrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--blue-deep);
+  background: rgba(63, 123, 214, 0.1);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+.gravity-arrow .arrow {
+  display: inline-block;
+  width: 18px; height: 18px;
+  background: var(--blue);
+  color: white;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 18px;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .cell.clickable {
