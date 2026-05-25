@@ -159,15 +159,17 @@ export default async function handler(req) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
     const envNames = Object.keys(process.env || {});
-    const anthropicMatches = envNames.filter(n => /anthrop/i.test(n));
+    // Filter to anything that looks like a user-added var (not Vercel/system defaults).
+    const systemPrefixes = /^(VERCEL|AWS|NODE|NEXT|PATH|HOME|HOSTNAME|PWD|SHLVL|_|TZ|LANG|LC_|TERM|EDGE_RUNTIME)/;
+    const userVars = envNames.filter(n => !systemPrefixes.test(n));
+    const apiLike = envNames.filter(n => /api|key|token|secret|claude|opus|anthrop/i.test(n));
     return new Response(JSON.stringify({
       error: "ANTHROPIC_API_KEY not set on server",
       debug: {
         total_env_vars_visible: envNames.length,
-        names_containing_anthropic: anthropicMatches,
-        hint: anthropicMatches.length
-          ? `Found ${anthropicMatches.join(", ")} but not 'ANTHROPIC_API_KEY' exactly. Check spelling/case in Vercel.`
-          : "No anthropic-prefixed env vars visible to this function. Verify in Vercel Settings → Environment Variables that ANTHROPIC_API_KEY exists, is applied to Production, and that you redeployed AFTER adding it (Deployments → ⋯ → Redeploy, without build cache).",
+        non_system_var_names: userVars,
+        names_matching_api_or_key_or_token: apiLike,
+        hint: "Compare these names to what you typed in Vercel. The var must be exactly 'ANTHROPIC_API_KEY' (no spaces, all caps), applied to Production, and a fresh deploy must have been triggered AFTER adding it.",
       },
     }), { status: 500, headers: { "content-type": "application/json" } });
   }
