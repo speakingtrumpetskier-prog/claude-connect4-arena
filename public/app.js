@@ -527,8 +527,8 @@ function afterMove() {
     stopTicker();
     render();
     renderTimers();
-    if (w.winner === 1) { setStatus("You win.", "win-human"); }
-    else { setStatus("Claude wins.", "win-claude"); }
+    if (w.winner === 1) { setStatus("You win.", "win-human"); celebrate(1); }
+    else { setStatus("Claude wins.", "win-claude"); celebrate(2); }
     return true;
   }
   if (isBoardFull(state.board)) {
@@ -649,6 +649,43 @@ async function requestClaudeMove() {
   setStatus("Your move.");
 }
 
+// ---------- Game-end celebrations ----------
+function celebrate(winner) {
+  const body = document.body;
+  body.classList.remove("human-wins", "claude-wins");
+  // Reflow so animation restarts if invoked back-to-back.
+  // eslint-disable-next-line no-unused-expressions
+  void body.offsetWidth;
+  if (winner === 1) {
+    body.classList.add("human-wins");
+    spawnConfetti();
+    setTimeout(() => body.classList.remove("human-wins"), 2400);
+  } else if (winner === 2) {
+    body.classList.add("claude-wins");
+    setTimeout(() => body.classList.remove("claude-wins"), 2200);
+  }
+}
+
+const CONFETTI_COLORS = ["#e85655", "#f0bf3a", "#3f7bd6", "#5ea671", "#9879d4", "#f08a4d"];
+function spawnConfetti(count = 70) {
+  const frag = document.createDocumentFragment();
+  const made = [];
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement("div");
+    p.className = "confetti";
+    p.style.left = (Math.random() * 100) + "vw";
+    p.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+    p.style.width = (6 + Math.random() * 8) + "px";
+    p.style.height = (10 + Math.random() * 8) + "px";
+    p.style.animationDuration = (2 + Math.random() * 1.8) + "s";
+    p.style.animationDelay = (Math.random() * 0.4) + "s";
+    frag.appendChild(p);
+    made.push(p);
+  }
+  document.body.appendChild(frag);
+  setTimeout(() => made.forEach(el => el.remove()), 5500);
+}
+
 // Pick any legal move for Claude when its API call is too slow or its output
 // is unusable. Uses uniform random over legal moves; no strategy.
 function pickFallbackMove() {
@@ -726,11 +763,11 @@ async function requestClaudeCustomMove(humanMove) {
   state.moveCount += 2;
   if (result.gameStatus === "human_wins") {
     state.gameOver = true; state.winner = 1;
-    render(); setStatus("You win. " + (result.message || ""), "win-human"); return;
+    render(); setStatus("You win. " + (result.message || ""), "win-human"); celebrate(1); return;
   }
   if (result.gameStatus === "claude_wins") {
     state.gameOver = true; state.winner = 2;
-    render(); setStatus("Claude wins. " + (result.message || ""), "win-claude"); return;
+    render(); setStatus("Claude wins. " + (result.message || ""), "win-claude"); celebrate(2); return;
   }
   if (result.gameStatus === "draw") {
     state.gameOver = true;
