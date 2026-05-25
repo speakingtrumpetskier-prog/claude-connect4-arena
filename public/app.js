@@ -333,8 +333,9 @@ function render() {
   boardEl.innerHTML = "";
   const gridRows = 2 + ROWS + 1;   // col-labels + top-drops + cells + bottom-drops
   const gridCols = 2 + COLS + 1;   // row-labels + left-drops + cells + right-drops
-  boardEl.style.gridTemplateColumns = `repeat(${gridCols}, 52px)`;
-  boardEl.style.gridTemplateRows = `repeat(${gridRows}, 52px)`;
+  // Compact strip for labels so they sit close to the drop arrows, not a full cell away.
+  boardEl.style.gridTemplateColumns = `22px 36px repeat(${COLS}, 52px) 36px`;
+  boardEl.style.gridTemplateRows    = `18px 36px repeat(${ROWS}, 52px) 36px`;
 
   const moves = state.variant === "custom" ? null : legalMoves();
   const isSupported = (edge, internalIdx) => {
