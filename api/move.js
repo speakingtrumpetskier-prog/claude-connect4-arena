@@ -193,7 +193,7 @@ YOU CONTROL THE GAME — you decide:
    - { "text": "use exploding tile at C2" } — they typed in the action bar.
    You interpret and validate under YOUR rules. If illegal, set illegal=true with an explanation in message.
 
-4. **UI input mode.** You control how the human can input moves via the `inputMode` field in your response:
+4. **UI input mode.** You control how the human can input moves via the "inputMode" field in your response:
    - "drops" (DEFAULT) — top drop arrows are clickable, cells are NOT. Standard Connect-4 feel. Use this unless your rules need something different.
    - "cells" — top arrows hidden, cells clickable. Use when placement is mid-board, free-positioning, etc.
    - "both" — both work. Useful when some moves are drops and others are special placements.
