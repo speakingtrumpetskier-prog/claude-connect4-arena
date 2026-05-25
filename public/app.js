@@ -39,7 +39,7 @@ const VARIANT_NAMES = {
 };
 
 const VARIANT_DESCRIPTIONS = {
-  classic: "<strong>Standard Connect 4.</strong>",
+  classic: "",
   diagonal: "<strong>Gravity pulls down-and-right. Drop pieces from the top edge OR the left edge.</strong>",
   flip: "<strong>Gravity rotates clockwise every N moves.</strong> All pieces re-settle each time it rotates.",
   custom: "<strong>You write the rules; Claude enforces them and plays.</strong> Describe your variant in plain English in the box below. Claude validates each of your moves, makes its own move, and returns the new board.",
@@ -86,6 +86,7 @@ function newGame() {
     timeHuman: TIME_PER_PLAYER_MS,
     timeClaude: TIME_PER_PLAYER_MS,
     turnStart: Date.now(),
+    started: true,
   };
   thinkingEl.textContent = "Make a move. Claude's reasoning will stream here, line by line, as it considers candidate moves and their consequences.";
   thinkingEl.classList.add("empty");
@@ -109,7 +110,7 @@ function stopTicker() {
 }
 
 function tick() {
-  if (!state || state.gameOver) return;
+  if (!state || state.gameOver || !state.started) return;
   const now = Date.now();
   const elapsed = now - state.turnStart;
   state.turnStart = now;
@@ -153,12 +154,13 @@ function fmtClock(ms) {
 function renderTimers() {
   timerHumanClock.textContent = fmtClock(state.timeHuman);
   timerClaudeClock.textContent = fmtClock(state.timeClaude);
-  const humanActive = !state.gameOver && state.turn === 1 && !state.pendingClaude;
-  const claudeActive = !state.gameOver && (state.turn === 2 || state.pendingClaude);
+  const running = state.started && !state.gameOver;
+  const humanActive = running && state.turn === 1 && !state.pendingClaude;
+  const claudeActive = running && (state.turn === 2 || state.pendingClaude);
   timerHumanEl.classList.toggle("active", humanActive);
   timerClaudeEl.classList.toggle("active", claudeActive);
-  timerHumanEl.classList.toggle("low", !state.gameOver && state.timeHuman > 0 && state.timeHuman < 15000);
-  timerClaudeEl.classList.toggle("low", !state.gameOver && state.timeClaude > 0 && state.timeClaude < 15000);
+  timerHumanEl.classList.toggle("low", running && state.timeHuman > 0 && state.timeHuman < 15000);
+  timerClaudeEl.classList.toggle("low", running && state.timeClaude > 0 && state.timeClaude < 15000);
 }
 
 // ---------- Gravity vectors ----------
@@ -368,7 +370,7 @@ function render() {
     });
   };
 
-  const interactive = !state.gameOver && !state.pendingClaude && state.turn === 1;
+  const interactive = state.started && !state.gameOver && !state.pendingClaude && state.turn === 1;
   const dropStateFor = (edge, idx) =>
     !isSupported(edge, idx) ? "unsupported" : (interactive ? "active" : "waiting");
 
@@ -872,4 +874,36 @@ newGameBtn.addEventListener("click", newGame);
 flipNWrap.hidden = variantSel.value !== "flip";
 customWrap.hidden = variantSel.value !== "custom";
 updateVariantDesc();
-newGame();
+initBoard();
+
+function initBoard() {
+  // Pre-start: show an empty board with full clocks, but no ticker, no
+  // interactivity. Game begins when the user clicks "Start game".
+  state = {
+    variant: variantSel.value,
+    board: emptyBoard(),
+    turn: firstSel.value === "human" ? 1 : 2,
+    moveCount: 0,
+    gameOver: false,
+    winner: null,
+    winningCells: [],
+    history: [],
+    flipN: parseInt(flipNInput.value, 10) || 3,
+    gravityIdx: 0,
+    customRules: customRulesEl.value.trim(),
+    pendingClaude: false,
+    timeHuman: TIME_PER_PLAYER_MS,
+    timeClaude: TIME_PER_PLAYER_MS,
+    turnStart: Date.now(),
+    started: false,
+  };
+  thinkingEl.textContent = "Press Start game to begin.";
+  thinkingEl.classList.add("empty");
+  logEl.innerHTML = "";
+  variantNameEl.textContent = VARIANT_NAMES[state.variant] || state.variant;
+  timerHumanEl.classList.remove("expired", "low", "active");
+  timerClaudeEl.classList.remove("expired", "low", "active");
+  render();
+  renderTimers();
+  setStatus("Press Start game.");
+}

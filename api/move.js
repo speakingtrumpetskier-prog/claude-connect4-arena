@@ -101,6 +101,20 @@ RULES — GRAVITY ROTATE:
   return base;
 }
 
+function timeControlBlock(body) {
+  if (typeof body.timeClaudeMs !== "number") return null;
+  const perMove = Math.round((body.timePerPlayerMs || 60000) / 1000);
+  const yourSec = Math.max(0, Math.round(body.timeClaudeMs / 1000));
+  return [
+    `Time control: ${perMove} seconds per move (the clock resets at the start of each turn).`,
+    `Your remaining time for THIS move: ${yourSec}s.`,
+    `IMPORTANT: if you exceed the budget, the system auto-plays a RANDOM LEGAL move on your behalf — almost certainly worse than what you would choose. Keep analysis tight; commit when you have a strong candidate rather than exhausting depth.`,
+    yourSec < 20
+      ? "Your clock is LOW for this move — prefer a fast, solid move over deep analysis."
+      : "Use whatever depth the position warrants — you have time, but stay under budget.",
+  ].join("\n");
+}
+
 function userMessageForVariant(variant, body) {
   const { board, history, moveCount, gravityIdx, flipN } = body;
   const parts = [];
@@ -116,6 +130,8 @@ function userMessageForVariant(variant, body) {
   } else {
     parts.push("No moves yet.");
   }
+  const tc = timeControlBlock(body);
+  if (tc) parts.push(tc);
   parts.push("It is YOUR turn. Reason about the best move, then output it as the JSON block described.");
   return parts.join("\n\n");
 }
@@ -168,8 +184,10 @@ function customUserMessage(body) {
     history && history.length
       ? "History so far:\n" + history.map((h, i) => `  ${i + 1}. ${h.player === 1 ? "Human" : "Claude"}: ${JSON.stringify(h.move)}`).join("\n")
       : "No moves yet.",
-    "Validate the human's move under the rules, then make YOUR move if the game continues. Return the JSON block described.",
   ];
+  const tc = timeControlBlock(body);
+  if (tc) parts.push(tc);
+  parts.push("Validate the human's move under the rules, then make YOUR move if the game continues. Return the JSON block described.");
   return parts.join("\n\n");
 }
 
