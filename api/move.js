@@ -7,14 +7,23 @@ export const config = { runtime: "edge" };
 const MODEL = "claude-opus-4-7";
 
 function describeBoard(board) {
-  // Chess-style render: columns A..G (left to right), rows 1..6 (BOTTOM to TOP).
-  const sym = (v) => (v === 0 ? "." : v === 1 ? "H" : "C");
+  // Chess-style render: columns A..(A+W-1) left → right, rows 1..H BOTTOM → TOP.
+  // Decorated cells render with their glyph (single char), else . / H / C.
+  const sym = (v) => {
+    if (v === 0 || v == null) return ".";
+    if (v === 1) return "H";
+    if (v === 2) return "C";
+    if (typeof v === "object" && v.glyph) return String(v.glyph).slice(0, 1);
+    return "?";
+  };
   const totalRows = board.length;
-  const letters = ["A","B","C","D","E","F","G"].slice(0, board[0].length);
+  const totalCols = board[0].length;
+  const letters = Array.from({ length: totalCols }, (_, i) => String.fromCharCode(65 + i));
   const colHeader = "    " + letters.map(l => ` ${l} `).join("");
   const rows = board.map((row, r) => {
-    const displayRow = totalRows - r;  // r=0 (top) → "6", r=5 (bottom) → "1"
-    return `${displayRow}   ` + row.map(v => ` ${sym(v)} `).join("");
+    const displayRow = totalRows - r;  // r=0 (top) → chess row N, r=N-1 (bottom) → chess row 1
+    const label = String(displayRow).padStart(2, " ");
+    return `${label}  ` + row.map(v => ` ${sym(v)} `).join("");
   });
   return [colHeader, ...rows].join("\n");
 }
@@ -146,7 +155,7 @@ ${customRules || "(no rules provided — assume standard Connect 4)"}
 
 DEFAULTS (apply silently UNLESS the user's rules override them — do not surface these as if they were special rules):
 - Board: 6 rows × 7 columns.
-- Gravity: standard Connect 4. When the user "plays" a column, the piece falls to the lowest empty cell in that column. A click on any cell of an empty column is treated as a drop into that column. Pieces do not stack mid-column — they always settle at the bottom of the column's empty space.
+- Gravity: STANDARD CONNECT 4. Pieces ALWAYS fall to the bottom of their column. The user CANNOT place a piece mid-column. A click on any cell — say "E5" — means "drop a piece into column E," NOT "place a piece at E5". You must scan column E from the bottom up (chess row 1, then 2, then 3, ...) and put the piece in the FIRST EMPTY CELL. If column E already has 3 pieces stacked from the bottom, the new piece lands at chess row 4 — NOT row 5. The user's clicked row is irrelevant under default gravity; only their clicked column matters.
 - Win condition: 4 in a row (horizontal, vertical, or diagonal).
 - Pieces: plain integers 1 (human) and 2 (Claude).
 
@@ -157,6 +166,17 @@ NOTATION — chess-style:
 - Rows labeled 1..N, BOTTOM to TOP. Row 1 is always the bottom row.
 - Cells: "<col><row>", e.g., "A1" bottom-left, "D3" 4th column / 3rd row up.
 - Always use this notation in reasoning. Never write tuples like "(5,3)".
+
+INTERNAL ARRAY ↔ CHESS LABEL — get this right or your moves will appear in the wrong rows:
+- The newBoard array's row 0 is the TOP row of the displayed board. For an N-row board, array row 0 = chess row N, array row N-1 = chess row 1.
+- Array col 0 is the LEFTMOST column = chess col A.
+- Conversion: chess "<col><row>" ↔ array (N - row, col_index_from_A).
+- Worked examples for an 8-row board (N=8):
+  - chess A1 (bottom-left)  = array (7, 0)
+  - chess H8 (top-right)    = array (0, 7)
+  - chess E5                = array (8 - 5, 4) = array (3, 4)
+  - chess E4                = array (8 - 4, 4) = array (4, 4)   ← different cell from E5
+- Sanity-check: before reporting a cell name, compute it back from array coords using N - r. If your prose says "piece at E5" but you wrote it at array (4, 4), you mean E4. Do not mix them up.
 
 YOU CONTROL THE GAME — you decide:
 
