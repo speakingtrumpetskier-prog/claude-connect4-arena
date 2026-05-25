@@ -39,10 +39,10 @@ const VARIANT_NAMES = {
 };
 
 const VARIANT_DESCRIPTIONS = {
-  classic: "<strong>Standard Connect 4.</strong> Drop a piece in any column from the top — it falls to the lowest empty cell. Four in a row (horizontal, vertical, or diagonal) wins.",
-  diagonal: "<strong>Gravity pulls down-and-right.</strong> Drop pieces from the top edge OR the left edge; each piece slides along the diagonal until it hits a wall or another piece. Four in a row still wins — but the geometry means top-left drops travel farthest, and the bottom-right corner fills first.",
-  flip: "<strong>Gravity rotates clockwise every N moves</strong> (down → left → up → right → down). All pieces re-settle each time it rotates, which can create or destroy threats overnight. The active drop edge moves with gravity. Plan for what the board will look like AFTER the next rotation, not just now.",
-  custom: "<strong>You write the rules; Claude enforces them and plays.</strong> Describe your variant in plain English in the box below. Claude validates each of your moves, makes its own move, and returns the new board. Looser correctness, maximum weirdness — try anything.",
+  classic: "<strong>Standard Connect 4.</strong>",
+  diagonal: "<strong>Gravity pulls down-and-right. Drop pieces from the top edge OR the left edge.</strong>",
+  flip: "<strong>Gravity rotates clockwise every N moves.</strong> All pieces re-settle each time it rotates.",
+  custom: "<strong>You write the rules; Claude enforces them and plays.</strong> Describe your variant in plain English in the box below. Claude validates each of your moves, makes its own move, and returns the new board.",
 };
 
 // Chess-style notation: columns A..G (left → right), rows 1..6 (bottom → top).
