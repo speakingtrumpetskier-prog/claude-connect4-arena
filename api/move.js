@@ -178,7 +178,8 @@ export default async function handler(req) {
   catch { return new Response("Bad JSON", { status: 400 }); }
 
   const variant = body.variant || "classic";
-  const budget = Math.max(1024, Math.min(20000, parseInt(body.budget, 10) || 6000));
+  const VALID_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
+  const effort = VALID_EFFORTS.has(body.effort) ? body.effort : "medium";
 
   let system, userMsg;
   if (variant === "custom") {
@@ -202,9 +203,10 @@ export default async function handler(req) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: Math.max(budget + 2000, 4096),
+      max_tokens: 16000,
       stream: true,
-      thinking: { type: "enabled", budget_tokens: budget },
+      thinking: { type: "adaptive", display: "summarized" },
+      output_config: { effort },
       system,
       messages: [{ role: "user", content: userMsg }],
     }),

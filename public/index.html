@@ -39,9 +39,14 @@
           </div>
 
           <div class="field">
-            <label class="field-label" for="budget">Thinking budget</label>
-            <input id="budget" type="range" min="1024" max="20000" step="512" value="6000" />
-            <span class="budget-readout"><span id="budget-val">6000</span> tokens</span>
+            <label class="field-label" for="effort">Reasoning effort</label>
+            <select id="effort">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+              <option value="xhigh">Very high</option>
+              <option value="max">Max</option>
+            </select>
           </div>
 
           <div class="field">

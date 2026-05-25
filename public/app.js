@@ -15,8 +15,7 @@ const logEl = $("#log");
 const variantSel = $("#variant");
 const flipNWrap = $("#flip-n-wrap");
 const flipNInput = $("#flip-n");
-const budgetInput = $("#budget");
-const budgetVal = $("#budget-val");
+const effortInput = $("#effort");
 const firstSel = $("#first");
 const newGameBtn = $("#new-game");
 const customWrap = $("#custom-rules-wrap");
@@ -450,7 +449,7 @@ async function requestClaudeMove() {
     moveCount: state.moveCount,
     flipN: state.flipN,
     gravityIdx: state.gravityIdx,
-    budget: parseInt(budgetInput.value, 10),
+    effort: effortInput.value,
   };
 
   let finalText = "";
@@ -500,7 +499,7 @@ async function requestClaudeCustomMove(humanMove) {
     board: state.board,
     history: state.history,
     humanMove,
-    budget: parseInt(budgetInput.value, 10),
+    effort: effortInput.value,
   };
 
   let finalText = "";
@@ -632,7 +631,6 @@ function parseCustomResult(text) {
 }
 
 // ---------- Wire up ----------
-budgetInput.addEventListener("input", () => { budgetVal.textContent = budgetInput.value; });
 variantSel.addEventListener("change", () => {
   flipNWrap.hidden = variantSel.value !== "flip";
   customWrap.hidden = variantSel.value !== "custom";
@@ -643,5 +641,4 @@ newGameBtn.addEventListener("click", newGame);
 // Initial.
 flipNWrap.hidden = variantSel.value !== "flip";
 customWrap.hidden = variantSel.value !== "custom";
-budgetVal.textContent = budgetInput.value;
 newGame();
