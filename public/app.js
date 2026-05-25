@@ -38,11 +38,21 @@ const VARIANT_NAMES = {
   custom: "Custom Rules",
 };
 
-const COL_LABELS = ["a", "b", "c", "d", "e", "f", "g"];
-function coordLabel(r, c) {
-  // Chess-style: column letter + (ROWS - row) so bottom row is "1".
-  return `${COL_LABELS[c]}${ROWS - r}`;
+// Chess-style notation: columns A..G (left → right), rows 1..6 (bottom → top).
+// Internal arrays use row 0 = top, col 0 = left. Convert at every boundary.
+function colName(c) { return String.fromCharCode(65 + c); }            // 0→"A", 6→"G"
+function rowName(r) { return String(ROWS - r); }                       // r=0→"6", r=5→"1"
+function colIdx(letter) {
+  const s = String(letter).toUpperCase().trim();
+  if (!/^[A-G]$/.test(s)) return NaN;
+  return s.charCodeAt(0) - 65;
 }
+function rowIdx(num) {
+  const n = parseInt(String(num).trim(), 10);
+  if (isNaN(n) || n < 1 || n > ROWS) return NaN;
+  return ROWS - n;
+}
+function cellChess(r, c) { return `${colName(c)}${rowName(r)}`; }
 
 // ---------- State ----------
 let state = null;
@@ -145,16 +155,17 @@ const GRAVITY_VECTORS = [
 ];
 
 // ---------- Variant: classic ----------
-// Drop into column c. Piece falls until it hits the bottom or another piece.
+// Drop into column <letter>. Piece falls until it hits the bottom or another piece.
 function classicLegalMoves(board) {
   const moves = [];
   for (let c = 0; c < COLS; c++) {
-    if (board[0][c] === 0) moves.push({ column: c });
+    if (board[0][c] === 0) moves.push({ column: colName(c) });
   }
   return moves;
 }
 function classicApply(board, move, player) {
-  const c = move.column;
+  const c = colIdx(move.column);
+  if (isNaN(c)) return null;
   for (let r = ROWS - 1; r >= 0; r--) {
     if (board[r][c] === 0) {
       board[r][c] = player;
@@ -170,19 +181,19 @@ function classicApply(board, move, player) {
 function diagonalLegalMoves(board) {
   const moves = [];
   for (let c = 0; c < COLS; c++) {
-    if (board[0][c] === 0) moves.push({ edge: "top", index: c });
+    if (board[0][c] === 0) moves.push({ edge: "top", column: colName(c) });
   }
   for (let r = 0; r < ROWS; r++) {
-    if (board[r][0] === 0) moves.push({ edge: "left", index: r });
+    if (board[r][0] === 0) moves.push({ edge: "left", row: parseInt(rowName(r), 10) });
   }
   return moves;
 }
 function diagonalApply(board, move, player) {
   let r, c;
-  if (move.edge === "top") { r = 0; c = move.index; }
-  else if (move.edge === "left") { r = move.index; c = 0; }
+  if (move.edge === "top") { r = 0; c = colIdx(move.column); }
+  else if (move.edge === "left") { r = rowIdx(move.row); c = 0; }
   else return null;
-  if (board[r][c] !== 0) return null;
+  if (isNaN(r) || isNaN(c) || board[r][c] !== 0) return null;
   // Slide (+1,+1) while next cell is in-bounds and empty.
   while (r + 1 < ROWS && c + 1 < COLS && board[r + 1][c + 1] === 0) {
     r++; c++;
@@ -199,13 +210,13 @@ function flipLegalMoves(board, gravityIdx) {
   const g = GRAVITY_VECTORS[gravityIdx];
   const moves = [];
   if (g.dropEdge === "top") {
-    for (let c = 0; c < COLS; c++) if (board[0][c] === 0) moves.push({ edge: "top", index: c });
+    for (let c = 0; c < COLS; c++) if (board[0][c] === 0) moves.push({ edge: "top", column: colName(c) });
   } else if (g.dropEdge === "bottom") {
-    for (let c = 0; c < COLS; c++) if (board[ROWS - 1][c] === 0) moves.push({ edge: "bottom", index: c });
+    for (let c = 0; c < COLS; c++) if (board[ROWS - 1][c] === 0) moves.push({ edge: "bottom", column: colName(c) });
   } else if (g.dropEdge === "left") {
-    for (let r = 0; r < ROWS; r++) if (board[r][0] === 0) moves.push({ edge: "left", index: r });
+    for (let r = 0; r < ROWS; r++) if (board[r][0] === 0) moves.push({ edge: "left", row: parseInt(rowName(r), 10) });
   } else if (g.dropEdge === "right") {
-    for (let r = 0; r < ROWS; r++) if (board[r][COLS - 1] === 0) moves.push({ edge: "right", index: r });
+    for (let r = 0; r < ROWS; r++) if (board[r][COLS - 1] === 0) moves.push({ edge: "right", row: parseInt(rowName(r), 10) });
   }
   return moves;
 }
@@ -238,12 +249,12 @@ function settleAll(board, gravityIdx) {
 function flipApply(board, move, player, gravityIdx) {
   const g = GRAVITY_VECTORS[gravityIdx];
   let r, c;
-  if (move.edge === "top") { r = 0; c = move.index; }
-  else if (move.edge === "bottom") { r = ROWS - 1; c = move.index; }
-  else if (move.edge === "left") { r = move.index; c = 0; }
-  else if (move.edge === "right") { r = move.index; c = COLS - 1; }
+  if (move.edge === "top")    { r = 0;         c = colIdx(move.column); }
+  else if (move.edge === "bottom") { r = ROWS - 1; c = colIdx(move.column); }
+  else if (move.edge === "left")   { r = rowIdx(move.row);  c = 0; }
+  else if (move.edge === "right")  { r = rowIdx(move.row);  c = COLS - 1; }
   else return null;
-  if (board[r][c] !== 0) return null;
+  if (isNaN(r) || isNaN(c) || board[r][c] !== 0) return null;
   board[r][c] = player;
   // Slide along gravity until blocked.
   while (true) {
@@ -326,15 +337,19 @@ function render() {
   boardEl.style.gridTemplateRows = `repeat(${gridRows}, 52px)`;
 
   const moves = state.variant === "custom" ? null : legalMoves();
-  const isSupported = (edge, index) => {
+  const isSupported = (edge, internalIdx) => {
     if (state.variant === "custom") return false;
     if (!moves) return false;
-    return moves.some(m =>
-      (edge === "top" && (m.column === index || (m.edge === "top" && m.index === index))) ||
-      (edge === "bottom" && m.edge === "bottom" && m.index === index) ||
-      (edge === "left" && m.edge === "left" && m.index === index) ||
-      (edge === "right" && m.edge === "right" && m.index === index)
-    );
+    const asLetter = colName(internalIdx);
+    const asRowNum = parseInt(rowName(internalIdx), 10);
+    return moves.some(m => {
+      // Classic stores { column: "<letter>" } without an edge.
+      if (edge === "top" && !m.edge && m.column === asLetter) return true;
+      if (m.edge !== edge) return false;
+      if (edge === "top" || edge === "bottom") return m.column === asLetter;
+      if (edge === "left" || edge === "right") return m.row === asRowNum;
+      return false;
+    });
   };
 
   const interactive = !state.gameOver && !state.pendingClaude && state.turn === 1;
@@ -363,8 +378,8 @@ function render() {
         boardEl.appendChild(empty()); continue;
       }
 
-      if (isColLabelRow) { boardEl.appendChild(label(`c${c - 2}`)); continue; }
-      if (isRowLabelCol) { boardEl.appendChild(label(`r${r - 2}`)); continue; }
+      if (isColLabelRow) { boardEl.appendChild(label(colName(c - 2))); continue; }
+      if (isRowLabelCol) { boardEl.appendChild(label(rowName(r - 2))); continue; }
       if (isTopDropRow)    { const i = c - 2; boardEl.appendChild(makeDrop("top",    i, "▼", dropStateFor("top",    i))); continue; }
       if (isBottomDropRow) { const i = c - 2; boardEl.appendChild(makeDrop("bottom", i, "▲", dropStateFor("bottom", i))); continue; }
       if (isLeftDropCol)   { const i = r - 2; boardEl.appendChild(makeDrop("left",   i, "▶", dropStateFor("left",   i))); continue; }
@@ -439,12 +454,10 @@ function makeDrop(edge, index, arrow, dropState) {
 
 // ---------- Hover preview ----------
 let lastPreviewKey = null;
-function showHoverPreview(edge, index) {
+function showHoverPreview(edge, internalIdx) {
   // Compute where the piece would land using a board clone.
   const clone = state.board.map(r => r.slice());
-  let move;
-  if (state.variant === "classic") move = { column: index };
-  else move = { edge, index };
+  const move = buildMoveFromInternal(edge, internalIdx);
   let landed = null;
   if (state.variant === "classic") landed = classicApply(clone, move, 1);
   else if (state.variant === "diagonal") landed = diagonalApply(clone, move, 1);
@@ -465,17 +478,20 @@ function clearHoverPreview() {
 }
 
 // ---------- Click handlers ----------
-function onDropClick(edge, index) {
+function buildMoveFromInternal(edge, internalIdx) {
+  if (state.variant === "classic") return { column: colName(internalIdx) };
+  if (edge === "top" || edge === "bottom") return { edge, column: colName(internalIdx) };
+  return { edge, row: parseInt(rowName(internalIdx), 10) };
+}
+
+function onDropClick(edge, internalIdx) {
   if (state.gameOver || state.pendingClaude || state.turn !== 1) return;
-  let move;
-  if (state.variant === "classic") move = { column: index };
-  else move = { edge, index };
-  doHumanMove(move);
+  doHumanMove(buildMoveFromInternal(edge, internalIdx));
 }
 
 function onCustomCellClick(row, col) {
   if (state.gameOver || state.pendingClaude || state.turn !== 1) return;
-  doHumanMove({ row, col });
+  doHumanMove({ cell: cellChess(row, col) });
 }
 
 function doHumanMove(move) {
@@ -485,7 +501,7 @@ function doHumanMove(move) {
     if (!landed) { setStatus("Illegal move — try again."); return; }
     state.history.push({ player: 1, move, landed });
     state.moveCount++;
-    logAdd("human", `You: ${describeMove(move)} → r${landed.row} c${landed.col}`);
+    logAdd("human", `You: ${describeMove(move)} → ${cellChess(landed.row, landed.col)}`);
     if (afterMove()) return;
     maybeFlipGravity();
     render();
@@ -493,15 +509,18 @@ function doHumanMove(move) {
   } else {
     // Custom: send to Claude as rules engine. Claude returns new board + its move.
     state.history.push({ player: 1, move });
-    logAdd("human", `You: cell r${move.row} c${move.col}`);
+    logAdd("human", `You: ${describeMove(move)}`);
     requestClaudeCustomMove(move);
   }
 }
 
 function describeMove(move) {
-  if (move.column !== undefined) return `col ${move.column}`;
-  if (move.edge) return `${move.edge}-${move.index}`;
-  if (move.row !== undefined) return `(${move.row},${move.col})`;
+  if (move.cell) return `cell ${move.cell}`;
+  if (!move.edge && move.column) return `top ${move.column}`;        // classic
+  if (move.edge === "top")    return `top ${move.column}`;
+  if (move.edge === "bottom") return `bot ${move.column}`;
+  if (move.edge === "left")   return `left ${move.row}`;
+  if (move.edge === "right")  return `right ${move.row}`;
   return JSON.stringify(move);
 }
 
@@ -603,7 +622,7 @@ async function requestClaudeMove() {
   }
   state.history.push({ player: 2, move, landed });
   state.moveCount++;
-  logAdd("claude", `Claude: ${describeMove(move)} → r${landed.row} c${landed.col}`);
+  logAdd("claude", `Claude: ${describeMove(move)} → ${cellChess(landed.row, landed.col)}`);
   if (afterMove()) return;
   maybeFlipGravity();
   render();

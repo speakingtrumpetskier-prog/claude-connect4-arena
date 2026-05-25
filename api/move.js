@@ -7,10 +7,15 @@ export const config = { runtime: "edge" };
 const MODEL = "claude-opus-4-7";
 
 function describeBoard(board) {
-  // Render as a text grid for the model. Row 0 is the top.
+  // Chess-style render: columns A..G (left to right), rows 1..6 (BOTTOM to TOP).
   const sym = (v) => (v === 0 ? "." : v === 1 ? "H" : "C");
-  const colHeader = "   " + [...Array(board[0].length).keys()].map(i => `c${i}`).join(" ");
-  const rows = board.map((row, r) => `r${r}  ` + row.map(sym).join("  "));
+  const totalRows = board.length;
+  const letters = ["A","B","C","D","E","F","G"].slice(0, board[0].length);
+  const colHeader = "    " + letters.map(l => ` ${l} `).join("");
+  const rows = board.map((row, r) => {
+    const displayRow = totalRows - r;  // r=0 (top) → "6", r=5 (bottom) → "1"
+    return `${displayRow}   ` + row.map(v => ` ${sym(v)} `).join("");
+  });
   return [colHeader, ...rows].join("\n");
 }
 
@@ -19,23 +24,23 @@ const DROP_EDGES = { down: "top", left: "right", up: "bottom", right: "left" };
 
 function systemPromptForVariant(variant, opts = {}) {
   const base = `You are playing Connect 4 against a human. The board is 6 rows by 7 columns.
-The board is shown as a text grid where H = human piece, C = your piece, . = empty.
-Row 0 is the TOP row. Column 0 is the LEFT column.
 
-NOTATION — IMPORTANT for matching what the user sees:
-- Refer to cells as "r<row> c<col>", e.g., "r5 c3", NOT as "(5,3)" or "(row, col)" tuples.
-  The user's board UI labels rows as r0..r5 and columns as c0..c6, and tuple form is ambiguous (row-col vs x-y).
-- Refer to moves using the move format described below for the variant
-  (e.g., "top c3", "left r2"), matching the on-board labels.
-- When mentioning multiple cells (e.g., a diagonal threat), list them as
-  "r2 c0 → r3 c1 → r4 c2 → r5 c3" with explicit r/c labels.
+NOTATION — chess-style, matching the user's board UI:
+- Columns labeled A..G, left to right.
+- Rows labeled 1..6, BOTTOM to TOP. Row 1 is the bottom row; row 6 is the top row.
+- Cells are written as "<col><row>" — e.g., "A1" is the bottom-left, "G6" is the top-right, "D3" is the 4th column from the left, 3rd row from the bottom.
+
+In your reasoning, ALWAYS use this notation. Never write "(5,3)" or "(row, col)" tuples — they're ambiguous (row-col vs x-y).
+When mentioning multiple cells (e.g., a diagonal threat), list them like "A4 → B3 → C2 → D1".
+
+The board is shown as a text grid with H = human piece, C = your piece, . = empty.
 
 You are playing as C. You must win or block the human. Think carefully about
 threats, forks, tempo, and the geometry of this specific variant. Reason about
 candidate moves and only commit when you are confident.
 
-At the END of your response, output your move as a single JSON code block. Do
-not output any other JSON. Format:
+At the END of your response, output your move as a single JSON code block. No
+other JSON. The move object uses chess labels (see the per-variant format below).
 
 \`\`\`json
 { "move": <move object> }
@@ -45,10 +50,10 @@ not output any other JSON. Format:
   if (variant === "classic") {
     return base + `
 RULES — CLASSIC CONNECT 4:
-- On your turn, drop a piece into any column whose top cell (row 0) is empty.
+- On your turn, drop a piece into any column whose top cell (row 6) is empty.
 - The piece falls to the lowest empty cell in that column.
 - Win by making 4 in a row horizontally, vertically, or diagonally.
-- Move format: { "column": <0..6> }
+- Move format: { "column": "<A|B|C|D|E|F|G>" }   — e.g., { "column": "D" }
 `;
   }
 
@@ -56,11 +61,13 @@ RULES — CLASSIC CONNECT 4:
     return base + `
 RULES — DIAGONAL GRAVITY:
 - On your turn, place a piece on EITHER the top edge of a column OR the left edge of a row.
-- Gravity pulls along the (+row, +col) diagonal: a placed piece slides
-  down-and-to-the-right until the next cell is out of the board OR occupied.
+- Gravity pulls along the down-right diagonal in (col,row-from-bottom) terms — i.e., each step moves DOWN one row and RIGHT one column visually. A placed piece slides until the next cell is off the board OR occupied.
 - A move is legal only if the chosen entry cell (top of column, or left of row) is empty.
 - Win by making 4 in a row horizontally, vertically, or diagonally.
-- Move format: { "edge": "top", "index": <column 0..6> }  OR  { "edge": "left", "index": <row 0..5> }
+- Move format:
+    { "edge": "top",  "column": "<A..G>" }   — e.g., { "edge": "top",  "column": "C" }
+  OR
+    { "edge": "left", "row": <1..6> }         — e.g., { "edge": "left", "row": 4 }
 - Geometry note: pieces dropped near the top-right or bottom-left corners may
   not slide much; pieces dropped near the top-left slide farthest.
 `;
@@ -83,10 +90,10 @@ RULES — GRAVITY FLIP:
   create or destroy threats — plan accordingly.
 - Win by making 4 in a row horizontally, vertically, or diagonally at any point.
 - Move format depending on current drop edge:
-  - drop edge "top":    { "edge": "top",    "index": <col 0..6> }
-  - drop edge "bottom": { "edge": "bottom", "index": <col 0..6> }
-  - drop edge "left":   { "edge": "left",   "index": <row 0..5> }
-  - drop edge "right":  { "edge": "right",  "index": <row 0..5> }
+  - drop edge "top":    { "edge": "top",    "column": "<A..G>" }
+  - drop edge "bottom": { "edge": "bottom", "column": "<A..G>" }
+  - drop edge "left":   { "edge": "left",   "row": <1..6> }
+  - drop edge "right":  { "edge": "right",  "row": <1..6> }
 `;
   }
 
@@ -136,7 +143,12 @@ Rules supplied by the user:
 ${customRules || "(no rules provided — assume standard Connect 4)"}
 """
 
-The board is represented as a 2D array of integers: 0 = empty, 1 = human (H), 2 = you (C). Row 0 is the TOP, column 0 is the LEFT.
+NOTATION — chess-style, matching the user's board UI:
+- Columns labeled A..G (left to right). Rows labeled 1..6 (BOTTOM to TOP).
+- Cells are written "<col><row>", e.g., "A1" bottom-left, "G6" top-right, "D3" 4th col / 3rd row up.
+- Always use this notation in your reasoning. Never write "(5,3)" tuples.
+
+The board is represented INTERNALLY as a 2D array of integers: 0 = empty, 1 = human (H), 2 = you (C). Array row 0 is the TOP (chess row "6"); array column 0 is the LEFT (chess col "A").
 
 On each turn:
 1. The user proposes a move (specifying a cell, or whatever the rules require).
