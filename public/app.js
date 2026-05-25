@@ -23,6 +23,13 @@ const customRulesEl = $("#custom-rules");
 const gravityIndicator = $("#gravity-indicator");
 const streamingIndicator = $("#streaming-indicator");
 const variantNameEl = $("#variant-name");
+const timerHumanEl = $("#timer-human");
+const timerClaudeEl = $("#timer-claude");
+const timerHumanClock = timerHumanEl.querySelector(".clock");
+const timerClaudeClock = timerClaudeEl.querySelector(".clock");
+
+const TIME_PER_PLAYER_MS = 90 * 1000;
+let tickerHandle = null;
 
 const VARIANT_NAMES = {
   classic: "Classic Connect 4",
@@ -56,17 +63,77 @@ function newGame() {
     winningCells: [],
     history: [],
     flipN: parseInt(flipNInput.value, 10) || 3,
-    gravityIdx: 0, // 0=down,1=left,2=up,3=right
+    gravityIdx: 0,
     customRules: customRulesEl.value.trim(),
     pendingClaude: false,
+    timeHuman: TIME_PER_PLAYER_MS,
+    timeClaude: TIME_PER_PLAYER_MS,
+    turnStart: Date.now(),
   };
   thinkingEl.textContent = "Make a move. Claude's reasoning will stream here, line by line, as it considers candidate moves and their consequences.";
   thinkingEl.classList.add("empty");
   logEl.innerHTML = "";
   variantNameEl.textContent = VARIANT_NAMES[state.variant] || state.variant;
+  timerHumanEl.classList.remove("expired", "low");
+  timerClaudeEl.classList.remove("expired", "low");
+  startTicker();
   render();
+  renderTimers();
   setStatus(state.turn === 1 ? "Your move." : "Claude moves first…");
   if (state.turn === 2) requestClaudeMove();
+}
+
+function startTicker() {
+  if (tickerHandle) return;
+  tickerHandle = setInterval(tick, 100);
+}
+function stopTicker() {
+  if (tickerHandle) { clearInterval(tickerHandle); tickerHandle = null; }
+}
+
+function tick() {
+  if (!state || state.gameOver) return;
+  const now = Date.now();
+  const elapsed = now - state.turnStart;
+  state.turnStart = now;
+  if (state.pendingClaude || state.turn === 2) {
+    state.timeClaude = Math.max(0, state.timeClaude - elapsed);
+  } else if (state.turn === 1) {
+    state.timeHuman = Math.max(0, state.timeHuman - elapsed);
+  }
+  renderTimers();
+  if (state.timeHuman <= 0) timeoutLoss(1);
+  else if (state.timeClaude <= 0) timeoutLoss(2);
+}
+
+function timeoutLoss(loser) {
+  if (state.gameOver) return;
+  state.gameOver = true;
+  state.winner = loser === 1 ? 2 : 1;
+  stopTicker();
+  const el = loser === 1 ? timerHumanEl : timerClaudeEl;
+  el.classList.add("expired");
+  render();
+  if (loser === 1) setStatus("You timed out. Claude wins.", "win-claude");
+  else setStatus("Claude timed out. You win.", "win-human");
+}
+
+function fmtClock(ms) {
+  const totalSec = Math.ceil(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function renderTimers() {
+  timerHumanClock.textContent = fmtClock(state.timeHuman);
+  timerClaudeClock.textContent = fmtClock(state.timeClaude);
+  const humanActive = !state.gameOver && state.turn === 1 && !state.pendingClaude;
+  const claudeActive = !state.gameOver && (state.turn === 2 || state.pendingClaude);
+  timerHumanEl.classList.toggle("active", humanActive);
+  timerClaudeEl.classList.toggle("active", claudeActive);
+  timerHumanEl.classList.toggle("low", !state.gameOver && state.timeHuman > 0 && state.timeHuman < 15000);
+  timerClaudeEl.classList.toggle("low", !state.gameOver && state.timeClaude > 0 && state.timeClaude < 15000);
 }
 
 // ---------- Gravity vectors ----------
@@ -246,21 +313,21 @@ function maybeFlipGravity() {
 }
 
 // ---------- Rendering ----------
+// Grid layout (always):
+//   row 0:        [   ][   ][c0][c1][c2][c3][c4][c5][c6][   ]   <- column labels
+//   row 1:        [   ][   ][ ▼][ ▼][ ▼][ ▼][ ▼][ ▼][ ▼][   ]   <- top drops
+//   rows 2..7:    [r#][▶ ][cell][cell][cell][cell][cell][cell][cell][◀]
+//   row 8:        [   ][   ][ ▲][ ▲][ ▲][ ▲][ ▲][ ▲][ ▲][   ]   <- bottom drops
 function render() {
   boardEl.innerHTML = "";
-  // For variants with side-drop, we render a 7+2 x 6+2 grid with drop arrows.
-  const wantsSideDrop = state.variant === "diagonal" || state.variant === "flip" || state.variant === "custom";
-  const wantsTopDrop = state.variant === "classic" || state.variant === "diagonal" || state.variant === "flip" || state.variant === "custom";
-
-  const cols = wantsSideDrop ? COLS + 2 : COLS;
-  const rows = wantsTopDrop ? ROWS + 2 : ROWS;
-  boardEl.style.gridTemplateColumns = `repeat(${cols}, 56px)`;
-  boardEl.style.gridTemplateRows = `repeat(${rows}, 56px)`;
+  const gridRows = 2 + ROWS + 1;   // col-labels + top-drops + cells + bottom-drops
+  const gridCols = 2 + COLS + 1;   // row-labels + left-drops + cells + right-drops
+  boardEl.style.gridTemplateColumns = `repeat(${gridCols}, 52px)`;
+  boardEl.style.gridTemplateRows = `repeat(${gridRows}, 52px)`;
 
   const moves = state.variant === "custom" ? null : legalMoves();
-  // Is this drop position supported by the current variant + board state? (true = there's a legal move here for whichever player's turn)
   const isSupported = (edge, index) => {
-    if (state.variant === "custom") return false; // custom uses cell clicks, not drops
+    if (state.variant === "custom") return false;
     if (!moves) return false;
     return moves.some(m =>
       (edge === "top" && (m.column === index || (m.edge === "top" && m.index === index))) ||
@@ -271,48 +338,39 @@ function render() {
   };
 
   const interactive = !state.gameOver && !state.pendingClaude && state.turn === 1;
-  const dropStateFor = (edge, idx) => {
-    if (!isSupported(edge, idx)) return "unsupported";
-    return interactive ? "active" : "waiting";
+  const dropStateFor = (edge, idx) =>
+    !isSupported(edge, idx) ? "unsupported" : (interactive ? "active" : "waiting");
+
+  const empty = () => document.createElement("div");
+  const label = (text) => {
+    const el = document.createElement("div");
+    el.className = "coord-label";
+    el.textContent = text;
+    return el;
   };
 
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const isTopRow = wantsTopDrop && r === 0;
-      const isBottomRow = wantsTopDrop && r === rows - 1;
-      const isLeftCol = wantsSideDrop && c === 0;
-      const isRightCol = wantsSideDrop && c === cols - 1;
+  for (let r = 0; r < gridRows; r++) {
+    for (let c = 0; c < gridCols; c++) {
+      const isColLabelRow = r === 0;
+      const isTopDropRow  = r === 1;
+      const isBottomDropRow = r === gridRows - 1;
+      const isRowLabelCol = c === 0;
+      const isLeftDropCol = c === 1;
+      const isRightDropCol = c === gridCols - 1;
 
-      if ((isTopRow || isBottomRow) && (isLeftCol || isRightCol)) {
-        // Corner — empty
-        const corner = document.createElement("div");
-        boardEl.appendChild(corner);
-        continue;
-      }
-
-      if (isTopRow) {
-        const idx = wantsSideDrop ? c - 1 : c;
-        boardEl.appendChild(makeDrop("top", idx, "▼", dropStateFor("top", idx)));
-        continue;
-      }
-      if (isBottomRow) {
-        const idx = wantsSideDrop ? c - 1 : c;
-        boardEl.appendChild(makeDrop("bottom", idx, "▲", dropStateFor("bottom", idx)));
-        continue;
-      }
-      if (isLeftCol) {
-        const idx = wantsTopDrop ? r - 1 : r;
-        boardEl.appendChild(makeDrop("left", idx, "▶", dropStateFor("left", idx)));
-        continue;
-      }
-      if (isRightCol) {
-        const idx = wantsTopDrop ? r - 1 : r;
-        boardEl.appendChild(makeDrop("right", idx, "◀", dropStateFor("right", idx)));
-        continue;
+      // Corners — empty placeholder
+      if ((isColLabelRow || isTopDropRow || isBottomDropRow) && (isRowLabelCol || isLeftDropCol || isRightDropCol)) {
+        boardEl.appendChild(empty()); continue;
       }
 
-      const br = wantsTopDrop ? r - 1 : r;
-      const bc = wantsSideDrop ? c - 1 : c;
+      if (isColLabelRow) { boardEl.appendChild(label(`c${c - 2}`)); continue; }
+      if (isRowLabelCol) { boardEl.appendChild(label(`r${r - 2}`)); continue; }
+      if (isTopDropRow)    { const i = c - 2; boardEl.appendChild(makeDrop("top",    i, "▼", dropStateFor("top",    i))); continue; }
+      if (isBottomDropRow) { const i = c - 2; boardEl.appendChild(makeDrop("bottom", i, "▲", dropStateFor("bottom", i))); continue; }
+      if (isLeftDropCol)   { const i = r - 2; boardEl.appendChild(makeDrop("left",   i, "▶", dropStateFor("left",   i))); continue; }
+      if (isRightDropCol)  { const i = r - 2; boardEl.appendChild(makeDrop("right",  i, "◀", dropStateFor("right",  i))); continue; }
+
+      const br = r - 2, bc = c - 2;
       const v = state.board[br][bc];
       const cell = document.createElement("div");
       cell.className = "cell";
@@ -321,7 +379,6 @@ function render() {
       if (v === 1) cell.classList.add("piece-human");
       else if (v === 2) cell.classList.add("piece-claude");
       if (state.winningCells.some(([wr, wc]) => wr === br && wc === bc)) cell.classList.add("win");
-      // Custom variant: click any empty cell.
       if (state.variant === "custom" && v === 0 && interactive) {
         cell.classList.add("clickable");
         cell.addEventListener("click", () => onCustomCellClick(br, bc));
@@ -455,14 +512,18 @@ function afterMove() {
     state.gameOver = true;
     state.winner = w.winner;
     state.winningCells = w.cells;
+    stopTicker();
     render();
+    renderTimers();
     if (w.winner === 1) { setStatus("You win.", "win-human"); }
     else { setStatus("Claude wins.", "win-claude"); }
     return true;
   }
   if (isBoardFull(state.board)) {
     state.gameOver = true;
+    stopTicker();
     render();
+    renderTimers();
     setStatus("Draw.", "draw");
     return true;
   }

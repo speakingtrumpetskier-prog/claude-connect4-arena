@@ -69,8 +69,12 @@
       <section class="section board-wrap">
         <div class="board-meta">
           <span id="variant-name">Diagonal Gravity</span>
-          <span id="gravity-indicator" class="gravity-indicator" hidden></span>
+          <div class="timers">
+            <span id="timer-human" class="timer human"><span class="dot"></span><span class="clock">1:30</span></span>
+            <span id="timer-claude" class="timer claude"><span class="dot"></span><span class="clock">1:30</span></span>
+          </div>
         </div>
+        <div id="gravity-indicator" class="gravity-indicator" hidden style="align-self: flex-end;"></div>
         <div id="board" class="board" aria-label="Game board"></div>
         <div id="status" class="status">Your move</div>
       </section>

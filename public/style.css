@@ -300,6 +300,53 @@ button:active { transform: translateY(1px); }
   100% { transform: scale(1); opacity: 1; }
 }
 
+.coord-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  user-select: none;
+}
+
+/* Chess-clock timers */
+.timers {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  transition: background 100ms ease, color 100ms ease;
+}
+.timer .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.timer.human .dot { background: var(--red); }
+.timer.claude .dot { background: var(--yellow); }
+.timer.active {
+  background: rgba(63, 123, 214, 0.14);
+  color: var(--text);
+}
+.timer.active.human { background: rgba(232, 86, 85, 0.16); }
+.timer.active.claude { background: rgba(240, 191, 58, 0.22); }
+.timer.low { color: #b03e3e; animation: tick-pulse 1s steps(2) infinite; }
+@keyframes tick-pulse { 50% { opacity: 0.55; } }
+.timer.expired { color: #b03e3e; text-decoration: line-through; }
+
 .drop {
   width: 52px;
   height: 52px;
