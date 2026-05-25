@@ -127,6 +127,14 @@ function timeoutLoss(loser) {
   if (state.gameOver) return;
   state.gameOver = true;
   state.winner = loser === 1 ? 2 : 1;
+  // Cancel any in-flight Claude request — its response would otherwise apply
+  // a move after the clock already expired.
+  if (state.abortController) {
+    try { state.abortController.abort(); } catch {}
+    state.abortController = null;
+  }
+  state.pendingClaude = false;
+  streamingIndicator.hidden = true;
   stopTicker();
   const el = loser === 1 ? timerHumanEl : timerClaudeEl;
   el.classList.add("expired");
@@ -585,6 +593,7 @@ function logAdd(who, text) {
 async function requestClaudeMove() {
   if (state.gameOver) return;
   state.pendingClaude = true;
+  state.abortController = new AbortController();
   setStatus("Claude is thinking…", "thinking");
   thinkingEl.textContent = "";
   thinkingEl.classList.remove("empty");
@@ -606,16 +615,21 @@ async function requestClaudeMove() {
 
   let finalText = "";
   try {
-    finalText = await streamClaude(body);
+    finalText = await streamClaude(body, state.abortController.signal);
   } catch (err) {
+    if (state.gameOver) return; // timeout already finalized the game; ignore late error
     setStatus(err.message, "error");
     state.pendingClaude = false;
     streamingIndicator.hidden = true;
     render();
     return;
   }
+  // The clock may have expired while we were awaiting the stream — drop the
+  // response on the floor if so, so a late move can't undo the timeout.
+  if (state.gameOver) return;
   streamingIndicator.hidden = true;
   state.pendingClaude = false;
+  state.abortController = null;
 
   const move = parseClaudeMove(finalText);
   if (!move) {
@@ -640,8 +654,10 @@ async function requestClaudeMove() {
 async function requestClaudeCustomMove(humanMove) {
   if (state.gameOver) return;
   state.pendingClaude = true;
+  state.abortController = new AbortController();
   setStatus("Claude is thinking…", "thinking");
   thinkingEl.textContent = "";
+  thinkingEl.classList.remove("empty");
   streamingIndicator.hidden = false;
   render();
 
@@ -659,16 +675,19 @@ async function requestClaudeCustomMove(humanMove) {
 
   let finalText = "";
   try {
-    finalText = await streamClaude(body);
+    finalText = await streamClaude(body, state.abortController.signal);
   } catch (err) {
+    if (state.gameOver) return;
     setStatus(err.message, "error");
     state.pendingClaude = false;
     streamingIndicator.hidden = true;
     render();
     return;
   }
+  if (state.gameOver) return;
   streamingIndicator.hidden = true;
   state.pendingClaude = false;
+  state.abortController = null;
 
   const result = parseCustomResult(finalText);
   if (!result) {
@@ -706,11 +725,12 @@ async function requestClaudeCustomMove(humanMove) {
   setStatus("Your move. " + (result.message || ""));
 }
 
-async function streamClaude(body) {
+async function streamClaude(body, signal) {
   const resp = await fetch("/api/move", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
   if (!resp.ok) {
     const text = await resp.text();
