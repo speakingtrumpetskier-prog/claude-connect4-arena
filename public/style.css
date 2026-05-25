@@ -310,6 +310,9 @@ button:active { transform: translateY(1px); }
   color: var(--muted);
   user-select: none;
 }
+/* Pull labels right up against their drop arrows */
+.coord-label.col-label { transform: translateY(10px); }
+.coord-label.row-label { transform: translateX(10px); }
 
 /* Chess-clock timers */
 .timers {

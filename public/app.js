@@ -379,8 +379,8 @@ function render() {
         boardEl.appendChild(empty()); continue;
       }
 
-      if (isColLabelRow) { boardEl.appendChild(label(colName(c - 2))); continue; }
-      if (isRowLabelCol) { boardEl.appendChild(label(rowName(r - 2))); continue; }
+      if (isColLabelRow) { const el = label(colName(c - 2)); el.classList.add("col-label"); boardEl.appendChild(el); continue; }
+      if (isRowLabelCol) { const el = label(rowName(r - 2)); el.classList.add("row-label"); boardEl.appendChild(el); continue; }
       if (isTopDropRow)    { const i = c - 2; boardEl.appendChild(makeDrop("top",    i, "▼", dropStateFor("top",    i))); continue; }
       if (isBottomDropRow) { const i = c - 2; boardEl.appendChild(makeDrop("bottom", i, "▲", dropStateFor("bottom", i))); continue; }
       if (isLeftDropCol)   { const i = r - 2; boardEl.appendChild(makeDrop("left",   i, "▶", dropStateFor("left",   i))); continue; }
