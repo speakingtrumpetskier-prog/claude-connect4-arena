@@ -144,6 +144,14 @@ Rules supplied by the user:
 ${customRules || "(no rules provided — assume standard Connect 4)"}
 """
 
+DEFAULTS (apply silently UNLESS the user's rules override them — do not surface these as if they were special rules):
+- Board: 6 rows × 7 columns.
+- Gravity: standard Connect 4. When the user "plays" a column, the piece falls to the lowest empty cell in that column. A click on any cell of an empty column is treated as a drop into that column. Pieces do not stack mid-column — they always settle at the bottom of the column's empty space.
+- Win condition: 4 in a row (horizontal, vertical, or diagonal).
+- Pieces: plain integers 1 (human) and 2 (Claude).
+
+Only deviate from these defaults when the user's rules explicitly call for something different. If the rules add new piece types, abilities, board sizes, win conditions, gravity directions, etc., follow those.
+
 NOTATION — chess-style:
 - Columns labeled A, B, C, ... up to whatever column count your board has (max Z = 26 cols).
 - Rows labeled 1..N, BOTTOM to TOP. Row 1 is always the bottom row.
@@ -199,6 +207,19 @@ RESPONSE — at the END of your response, output exactly one JSON code block:
 \`\`\`
 
 Reason carefully in the thinking block before committing. If the user's rules are ambiguous, make a reasonable interpretation and explain it in message or gameInfo so they know what you assumed.`;
+}
+
+function customInitMessage(body) {
+  return [
+    "INITIALIZATION — the user just defined the rules above and clicked Setup. There are no moves yet.",
+    "Return the starting state of the game:",
+    "- newBoard: the initial board (right size, right starting pieces).",
+    "- claudeMove: null.",
+    "- gameStatus: \"continue\".",
+    "- message: a short one-line note telling the human how to play their first move (e.g., \"Click any column to drop a piece.\" or \"Type 'use exploding tile at <cell>' to deploy a bomb.\").",
+    "- gameInfo: any persistent state the player needs to see from the start (resource counts, current phase, etc.). Omit if not needed.",
+    "If the rules don't override the defaults, return an empty 6x7 board with no gameInfo.",
+  ].join("\n\n");
 }
 
 function customUserMessage(body) {
@@ -267,7 +288,7 @@ export default async function handler(req) {
   let system, userMsg;
   if (variant === "custom") {
     system = customSystemPrompt(body.customRules);
-    userMsg = customUserMessage(body);
+    userMsg = body.init ? customInitMessage(body) : customUserMessage(body);
   } else {
     system = systemPromptForVariant(variant, {
       gravityIdx: body.gravityIdx,

@@ -33,6 +33,9 @@ const customActionInput = $("#custom-action-input");
 
 const TIME_PER_PLAYER_MS = 60 * 1000;
 let tickerHandle = null;
+let customSetupDone = false;     // true once Claude has returned an initial board for custom variant
+let customSetupBoard = null;     // cached board from setup, applied when Start game clicked
+let customSetupGameInfo = "";    // cached gameInfo from setup
 
 const VARIANT_NAMES = {
   classic: "Classic Connect 4",
@@ -907,9 +910,23 @@ variantSel.addEventListener("change", () => {
   customActionForm.hidden = variantSel.value !== "custom";
   variantNameEl.textContent = VARIANT_NAMES[variantSel.value] || variantSel.value;
   updateVariantDesc();
-  // If the game hasn't started yet, refresh the board so it reflects the new
-  // variant (drop arrows, gravity badge, etc.) instead of the previous one.
+  // Switching variants invalidates any prior custom setup.
+  customSetupDone = false;
+  customSetupBoard = null;
+  customSetupGameInfo = "";
   if (state && !state.started) initBoard();
+  updateStartButton();
+});
+
+customRulesEl.addEventListener("input", () => {
+  // Edited rules invalidate the cached setup; user must re-run Setup.
+  if (customSetupDone) {
+    customSetupDone = false;
+    customSetupBoard = null;
+    customSetupGameInfo = "";
+    updateStartButton();
+    setStatus("Rules changed — click Setup again.");
+  }
 });
 
 customActionForm.addEventListener("submit", (e) => {
@@ -920,13 +937,104 @@ customActionForm.addEventListener("submit", (e) => {
   customActionInput.value = "";
   doHumanMove({ text });
 });
-newGameBtn.addEventListener("click", newGame);
+newGameBtn.addEventListener("click", onStartButton);
+
+function updateStartButton() {
+  if (!newGameBtn) return;
+  if (variantSel.value === "custom" && !customSetupDone) {
+    newGameBtn.textContent = "Setup";
+    newGameBtn.title = "Send your rules to Claude so it can build the initial board state";
+  } else {
+    newGameBtn.textContent = "Start game";
+    newGameBtn.title = "Begin the game (timer starts)";
+  }
+}
+
+function onStartButton() {
+  if (variantSel.value === "custom" && !customSetupDone) {
+    runCustomSetup();
+  } else {
+    newGame();
+    // If setup was done, the cached board carries over into the new state.
+    if (variantSel.value === "custom" && customSetupBoard) {
+      state.board = customSetupBoard;
+      if (customSetupGameInfo) {
+        gameInfoEl.hidden = false;
+        gameInfoEl.innerHTML = customSetupGameInfo;
+      }
+      // Clear the cache so the next "Start game" needs another Setup.
+      customSetupDone = false;
+      customSetupBoard = null;
+      customSetupGameInfo = "";
+      updateStartButton();
+      render();
+    }
+  }
+}
+
+async function runCustomSetup() {
+  const rules = customRulesEl.value.trim();
+  if (!rules) { setStatus("Type your rules above first.", "error"); return; }
+  newGameBtn.disabled = true;
+  newGameBtn.textContent = "Setting up…";
+  thinkingEl.textContent = "";
+  thinkingEl.classList.remove("empty");
+  streamingIndicator.hidden = false;
+  setStatus("Claude is setting up the game…", "thinking");
+
+  const body = {
+    variant: "custom",
+    customRules: rules,
+    init: true,
+    effort: effortInput.value,
+  };
+  const ac = new AbortController();
+  let finalText = "";
+  try {
+    finalText = await streamClaude(body, ac.signal);
+  } catch (err) {
+    streamingIndicator.hidden = true;
+    newGameBtn.disabled = false;
+    updateStartButton();
+    setStatus("Setup failed: " + err.message, "error");
+    return;
+  }
+  streamingIndicator.hidden = true;
+
+  const result = parseCustomResult(finalText);
+  if (!result || !result.newBoard) {
+    newGameBtn.disabled = false;
+    updateStartButton();
+    setStatus("Couldn't parse Claude's setup response. Try again.", "error");
+    thinkingEl.textContent += "\n\n--- RAW RESPONSE ---\n" + finalText;
+    return;
+  }
+
+  // Cache for when user clicks Start game.
+  customSetupBoard = result.newBoard;
+  customSetupGameInfo = result.gameInfo || "";
+  customSetupDone = true;
+  // Show the initialized board immediately so the user can see what they're starting from.
+  state.board = customSetupBoard;
+  if (customSetupGameInfo) {
+    gameInfoEl.hidden = false;
+    gameInfoEl.innerHTML = customSetupGameInfo;
+  } else {
+    gameInfoEl.hidden = true;
+    gameInfoEl.innerHTML = "";
+  }
+  newGameBtn.disabled = false;
+  updateStartButton();
+  setStatus(result.message ? `Setup complete. ${result.message}` : "Setup complete. Click Start game.");
+  render();
+}
 
 // Initial.
 flipNWrap.hidden = variantSel.value !== "flip";
 customWrap.hidden = variantSel.value !== "custom";
 customActionForm.hidden = variantSel.value !== "custom";
 updateVariantDesc();
+updateStartButton();
 initBoard();
 
 function initBoard() {
