@@ -5,7 +5,7 @@
 export const config = { runtime: "edge" };
 
 const MODEL = "claude-opus-4-7";
-const MAX_TOKENS = 2000;  // hard cap on thinking + response combined
+const MAX_TOKENS = 6000;  // hard cap on thinking + response combined
 
 function describeBoard(board) {
   // Chess-style render: columns A..(A+W-1) left → right, rows 1..H BOTTOM → TOP.
