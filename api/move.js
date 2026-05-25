@@ -87,18 +87,15 @@ RULES — GRAVITY FLIP:
 }
 
 function timeControlBlock(body) {
-  if (typeof body.timeClaudeMs !== "number" || typeof body.timeHumanMs !== "number") return null;
-  const total = Math.round((body.timePerPlayerMs || 90000) / 1000);
+  if (typeof body.timeClaudeMs !== "number") return null;
+  const perMove = Math.round((body.timePerPlayerMs || 90000) / 1000);
   const yourSec = Math.max(0, Math.round(body.timeClaudeMs / 1000));
-  const oppSec = Math.max(0, Math.round(body.timeHumanMs / 1000));
   return [
-    `Time control: chess clock, ${total} seconds total per player across the whole game.`,
-    `Your remaining clock: ${yourSec}s. Opponent's remaining clock: ${oppSec}s.`,
+    `Time control: ${perMove} seconds per move (the clock resets at the start of each turn).`,
+    `Your remaining time for THIS move: ${yourSec}s.`,
     yourSec < 30
-      ? "Your clock is LOW — prefer a fast, solid move over deep analysis. Don't spend time on lines you don't need to explore."
-      : oppSec < 30
-        ? "Opponent's clock is low. Lines that force them to find a precise response may be favorable."
-        : "Both clocks are healthy; use whatever depth the position warrants.",
+      ? "Your clock is LOW for this move — prefer a fast, solid move over deep analysis."
+      : "Use whatever depth the position warrants — you have plenty of time for this move.",
   ].join("\n");
 }
 

@@ -69,9 +69,10 @@
       <section class="section board-wrap">
         <div class="board-meta">
           <span id="variant-name">Diagonal Gravity</span>
-          <div class="timers">
-            <span id="timer-human" class="timer human"><span class="dot"></span><span class="clock">1:30</span></span>
-            <span id="timer-claude" class="timer claude"><span class="dot"></span><span class="clock">1:30</span></span>
+          <div class="timers" title="90 seconds per move. The clock resets at the start of each turn.">
+            <span id="timer-human" class="timer human" title="Your time for the current move"><span class="dot"></span><span class="clock">1:30</span></span>
+            <span id="timer-claude" class="timer claude" title="Claude's time for the current move"><span class="dot"></span><span class="clock">1:30</span></span>
+            <span class="timer-caption">/move</span>
           </div>
         </div>
         <div id="gravity-indicator" class="gravity-indicator" hidden style="align-self: flex-end;"></div>

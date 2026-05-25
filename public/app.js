@@ -528,6 +528,10 @@ function afterMove() {
     return true;
   }
   state.turn = state.turn === 1 ? 2 : 1;
+  // Per-turn clock: each move gets a fresh 90s. Reset whoever's turn just started.
+  if (state.turn === 1) state.timeHuman = TIME_PER_PLAYER_MS;
+  else state.timeClaude = TIME_PER_PLAYER_MS;
+  state.turnStart = Date.now();
   return false;
 }
 

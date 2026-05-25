@@ -346,6 +346,11 @@ button:active { transform: translateY(1px); }
 .timer.low { color: #b03e3e; animation: tick-pulse 1s steps(2) infinite; }
 @keyframes tick-pulse { 50% { opacity: 0.55; } }
 .timer.expired { color: #b03e3e; text-decoration: line-through; }
+.timer-caption {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
 
 .drop {
   width: 52px;
