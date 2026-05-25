@@ -594,6 +594,15 @@ async function requestClaudeMove() {
   if (state.gameOver) return;
   state.pendingClaude = true;
   state.abortController = new AbortController();
+  // Force-move safety: abort the stream a few seconds before the clock expires
+  // so we always have time to apply a fallback move within Claude's budget.
+  const FORCE_BUFFER_MS = 5000;
+  const forceAt = Math.max(2000, state.timeClaude - FORCE_BUFFER_MS);
+  const forceHandle = setTimeout(() => {
+    if (state.abortController) {
+      try { state.abortController.abort(); } catch {}
+    }
+  }, forceAt);
   setStatus("Claude is thinking…", "thinking");
   thinkingEl.textContent = "";
   thinkingEl.classList.remove("empty");
@@ -617,38 +626,69 @@ async function requestClaudeMove() {
   try {
     finalText = await streamClaude(body, state.abortController.signal);
   } catch (err) {
-    if (state.gameOver) return; // timeout already finalized the game; ignore late error
-    setStatus(err.message, "error");
-    state.pendingClaude = false;
-    streamingIndicator.hidden = true;
-    render();
-    return;
+    clearTimeout(forceHandle);
+    if (state.gameOver) return;
+    // If we force-aborted before any bytes arrived, fall through to fallback.
+    if (err.name !== "AbortError") {
+      setStatus(err.message, "error");
+      state.pendingClaude = false;
+      streamingIndicator.hidden = true;
+      render();
+      return;
+    }
   }
-  // The clock may have expired while we were awaiting the stream — drop the
-  // response on the floor if so, so a late move can't undo the timeout.
+  clearTimeout(forceHandle);
   if (state.gameOver) return;
   streamingIndicator.hidden = true;
   state.pendingClaude = false;
   state.abortController = null;
 
-  const move = parseClaudeMove(finalText);
+  let move = parseClaudeMove(finalText);
+  let forced = false;
   if (!move) {
-    setStatus("Couldn't parse Claude's move. Raw text in thinking panel.");
-    thinkingEl.textContent += "\n\n--- RAW RESPONSE ---\n" + finalText;
-    return;
+    // Either the stream was force-aborted before Claude finished, OR Claude's
+    // output was malformed. Either way: pick a legal move on Claude's behalf
+    // so the game continues within the budget.
+    move = pickFallbackMove();
+    forced = true;
+    if (!move) {
+      setStatus("No legal Claude move available.");
+      return;
+    }
   }
   const landed = applyMove(move, 2);
   if (!landed) {
-    setStatus("Claude returned illegal move: " + JSON.stringify(move));
+    // Claude returned a parseable but illegal move — fall back as well.
+    move = pickFallbackMove();
+    forced = true;
+    if (!move) { setStatus("No legal Claude move available."); return; }
+    const fb = applyMove(move, 2);
+    if (!fb) { setStatus("Fallback failed."); return; }
+    state.history.push({ player: 2, move, landed: fb });
+    state.moveCount++;
+    logAdd("system", `Auto-played for Claude: ${describeMove(move)} → ${cellChess(fb.row, fb.col)}`);
+    if (afterMove()) return;
+    maybeFlipGravity();
+    render();
+    setStatus("Your move.");
     return;
   }
   state.history.push({ player: 2, move, landed });
   state.moveCount++;
-  logAdd("claude", `Claude: ${describeMove(move)} → ${cellChess(landed.row, landed.col)}`);
+  if (forced) logAdd("system", `Auto-played for Claude: ${describeMove(move)} → ${cellChess(landed.row, landed.col)}`);
+  else logAdd("claude", `Claude: ${describeMove(move)} → ${cellChess(landed.row, landed.col)}`);
   if (afterMove()) return;
   maybeFlipGravity();
   render();
   setStatus("Your move.");
+}
+
+// Pick any legal move for Claude when its API call is too slow or its output
+// is unusable. Uses uniform random over legal moves; no strategy.
+function pickFallbackMove() {
+  const moves = legalMoves();
+  if (!moves || moves.length === 0) return null;
+  return moves[Math.floor(Math.random() * moves.length)];
 }
 
 async function requestClaudeCustomMove(humanMove) {
@@ -746,7 +786,16 @@ async function streamClaude(body, signal) {
   let outText = "";
 
   while (true) {
-    const { done, value } = await reader.read();
+    let res;
+    try {
+      res = await reader.read();
+    } catch (e) {
+      // Aborted mid-stream — return whatever we got so far instead of throwing,
+      // so the caller can salvage a parseable move from the partial text.
+      if (signal && signal.aborted) break;
+      throw e;
+    }
+    const { done, value } = res;
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     let idx;
