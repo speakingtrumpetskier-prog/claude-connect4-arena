@@ -158,9 +158,18 @@ export default async function handler(req) {
   }
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) {
-    return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not set on server" }), {
-      status: 500, headers: { "content-type": "application/json" },
-    });
+    const envNames = Object.keys(process.env || {});
+    const anthropicMatches = envNames.filter(n => /anthrop/i.test(n));
+    return new Response(JSON.stringify({
+      error: "ANTHROPIC_API_KEY not set on server",
+      debug: {
+        total_env_vars_visible: envNames.length,
+        names_containing_anthropic: anthropicMatches,
+        hint: anthropicMatches.length
+          ? `Found ${anthropicMatches.join(", ")} but not 'ANTHROPIC_API_KEY' exactly. Check spelling/case in Vercel.`
+          : "No anthropic-prefixed env vars visible to this function. Verify in Vercel Settings → Environment Variables that ANTHROPIC_API_KEY exists, is applied to Production, and that you redeployed AFTER adding it (Deployments → ⋯ → Redeploy, without build cache).",
+      },
+    }), { status: 500, headers: { "content-type": "application/json" } });
   }
   let body;
   try { body = await req.json(); }
