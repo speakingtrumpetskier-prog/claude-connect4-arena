@@ -1,0 +1,10 @@
+{
+  "name": "claude-connect4-arena",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Play twisted Connect 4 variants against Claude Opus 4.7 with visible thinking.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  }
+}
