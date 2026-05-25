@@ -5,8 +5,9 @@
 export const config = { runtime: "edge" };
 
 const MODEL = "claude-opus-4-7";
-const MAX_TOKENS = 6000;     // real hard cap on thinking + response combined
-const STATED_BUDGET = 2000;  // budget shown to Claude in the prompt — keeps it brisk; real cap above is just safety headroom
+const MAX_TOKENS = 10000;       // real hard cap on thinking + response combined
+const STATED_BUDGET = 2000;     // budget shown to Claude as its normal target
+const PANIC_THRESHOLD = 6000;   // self-checkpoint: if Claude is still thinking past this, commit immediately
 
 function describeBoard(board) {
   // Chess-style render: columns A..(A+W-1) left → right, rows 1..H BOTTOM → TOP.
@@ -50,7 +51,11 @@ You are playing as C. You must win or block the human. Think carefully about
 threats, forks, tempo, and the geometry of this specific variant. Reason about
 candidate moves and only commit when you are confident.
 
-OUTPUT BUDGET: You have a HARD cap of ${STATED_BUDGET} tokens combined (thinking + response). Keep thinking compact — a few candidates, brief evaluation. The final JSON move MUST be emitted before the budget runs out; if thinking exhausts the budget, no move comes through and a random move is auto-played instead (almost certainly worse than your choice). Always reserve ~100 tokens for the JSON block at the end. Don't over-explore — commit on a clearly good candidate.
+OUTPUT BUDGET (tiered — self-pace using these thresholds):
+- TARGET: ${STATED_BUDGET} tokens combined (thinking + response). This is the normal ceiling — aim to finish well under it. A few candidates, brief evaluation, commit.
+- PANIC at ${PANIC_THRESHOLD} tokens: if you find yourself still thinking past this point, STOP exploring and emit the JSON block IMMEDIATELY with your best current candidate. Do not refine further. A merely-good move now beats a brilliant move that never arrives.
+- HARD CAP at ${MAX_TOKENS} tokens: absolute ceiling. If you blow this, no JSON is emitted and a RANDOM move auto-plays.
+Always reserve ~100 tokens for the JSON block. The penalty for thinking too long is far worse than for thinking a little too briefly.
 
 At the END of your response, output your move as a single JSON code block. No
 other JSON. The move object uses chess labels (see the per-variant format below).
@@ -201,7 +206,11 @@ YOU CONTROL THE GAME — you decide:
    - Check for your win / draw.
    - Return the resulting board, your move, status, message, gameInfo.
 
-OUTPUT BUDGET: You have a HARD cap of ${STATED_BUDGET} tokens combined (thinking + response). Keep thinking tight; if you exhaust the budget before emitting the JSON block, the move/turn fails. Always reserve ~150 tokens for the JSON block (more if the board is large or has decorated cells). Don't deliberate exhaustively — commit on a reasonable line.
+OUTPUT BUDGET (tiered — self-pace using these thresholds):
+- TARGET: ${STATED_BUDGET} tokens (thinking + response). Aim to finish well under this.
+- PANIC at ${PANIC_THRESHOLD} tokens: if you're still thinking past this, STOP and emit the JSON block IMMEDIATELY with your best current candidate.
+- HARD CAP at ${MAX_TOKENS} tokens: absolute ceiling; blowing it means the move/turn fails.
+Always reserve ~150 tokens for the JSON block (more if the board is large or has decorated cells). Don't deliberate exhaustively — commit on a reasonable line.
 
 RESPONSE — at the END of your response, output exactly one JSON code block:
 
