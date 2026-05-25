@@ -5,7 +5,8 @@
 export const config = { runtime: "edge" };
 
 const MODEL = "claude-opus-4-7";
-const MAX_TOKENS = 6000;  // hard cap on thinking + response combined
+const MAX_TOKENS = 6000;     // real hard cap on thinking + response combined
+const STATED_BUDGET = 2000;  // budget shown to Claude in the prompt — keeps it brisk; real cap above is just safety headroom
 
 function describeBoard(board) {
   // Chess-style render: columns A..(A+W-1) left → right, rows 1..H BOTTOM → TOP.
@@ -49,7 +50,7 @@ You are playing as C. You must win or block the human. Think carefully about
 threats, forks, tempo, and the geometry of this specific variant. Reason about
 candidate moves and only commit when you are confident.
 
-OUTPUT BUDGET: You have a HARD cap of ${MAX_TOKENS} tokens combined (thinking + response). Keep thinking compact — a few candidates, brief evaluation. The final JSON move MUST be emitted before the budget runs out; if thinking exhausts the budget, no move comes through and a random move is auto-played instead (almost certainly worse than your choice). Always reserve ~100 tokens for the JSON block at the end. Don't over-explore — commit on a clearly good candidate.
+OUTPUT BUDGET: You have a HARD cap of ${STATED_BUDGET} tokens combined (thinking + response). Keep thinking compact — a few candidates, brief evaluation. The final JSON move MUST be emitted before the budget runs out; if thinking exhausts the budget, no move comes through and a random move is auto-played instead (almost certainly worse than your choice). Always reserve ~100 tokens for the JSON block at the end. Don't over-explore — commit on a clearly good candidate.
 
 At the END of your response, output your move as a single JSON code block. No
 other JSON. The move object uses chess labels (see the per-variant format below).
@@ -200,7 +201,7 @@ YOU CONTROL THE GAME — you decide:
    - Check for your win / draw.
    - Return the resulting board, your move, status, message, gameInfo.
 
-OUTPUT BUDGET: You have a HARD cap of ${MAX_TOKENS} tokens combined (thinking + response). Keep thinking tight; if you exhaust the budget before emitting the JSON block, the move/turn fails. Always reserve ~150 tokens for the JSON block (more if the board is large or has decorated cells). Don't deliberate exhaustively — commit on a reasonable line.
+OUTPUT BUDGET: You have a HARD cap of ${STATED_BUDGET} tokens combined (thinking + response). Keep thinking tight; if you exhaust the budget before emitting the JSON block, the move/turn fails. Always reserve ~150 tokens for the JSON block (more if the board is large or has decorated cells). Don't deliberate exhaustively — commit on a reasonable line.
 
 RESPONSE — at the END of your response, output exactly one JSON code block:
 
