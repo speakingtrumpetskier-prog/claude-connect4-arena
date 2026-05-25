@@ -864,13 +864,22 @@ async function streamClaude(body, signal) {
 }
 
 function parseClaudeMove(text) {
-  // Look for ```json ... ``` block, else first { ... } JSON.
-  const fence = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/);
-  let candidate = fence ? fence[1] : text;
-  const brace = candidate.match(/\{[\s\S]*\}/);
-  if (!brace) return null;
+  // Grab the LAST code block in the response (Claude often writes example JSON
+  // mid-reasoning; the final committed move is in the last fenced block).
+  const fences = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
+  let candidate = fences.length ? fences[fences.length - 1][1] : text;
+  // Within the candidate, find a balanced JSON object.
+  const start = candidate.indexOf("{");
+  if (start === -1) return null;
+  let depth = 0, end = -1;
+  for (let i = start; i < candidate.length; i++) {
+    const ch = candidate[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") { depth--; if (depth === 0) { end = i; break; } }
+  }
+  if (end === -1) return null;
   try {
-    const obj = JSON.parse(brace[0]);
+    const obj = JSON.parse(candidate.slice(start, end + 1));
     if (obj.move) return obj.move;
     if (obj.column !== undefined || obj.edge || obj.row !== undefined) return obj;
     return null;
@@ -878,14 +887,21 @@ function parseClaudeMove(text) {
 }
 
 function parseCustomResult(text) {
-  const fence = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/);
-  let candidate = fence ? fence[1] : text;
-  const all = candidate.match(/\{[\s\S]*\}/);
-  if (!all) return null;
+  // Grab the LAST code block — Claude may put example JSON in its reasoning.
+  const fences = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
+  let candidate = fences.length ? fences[fences.length - 1][1] : text;
+  const start = candidate.indexOf("{");
+  if (start === -1) return null;
+  let depth = 0, end = -1;
+  for (let i = start; i < candidate.length; i++) {
+    const ch = candidate[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") { depth--; if (depth === 0) { end = i; break; } }
+  }
+  if (end === -1) return null;
   try {
-    const obj = JSON.parse(all[0]);
+    const obj = JSON.parse(candidate.slice(start, end + 1));
     if (!obj.newBoard || !Array.isArray(obj.newBoard)) return null;
-    // Accept any rectangular board up to a reasonable cap (custom variants can resize).
     const R = obj.newBoard.length;
     if (R < 2 || R > 20) return null;
     if (!Array.isArray(obj.newBoard[0])) return null;
