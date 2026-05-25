@@ -137,54 +137,68 @@ function userMessageForVariant(variant, body) {
 }
 
 function customSystemPrompt(customRules) {
-  return `You are both the RULES ENGINE and the OPPONENT for a custom board game played on a 6-row by 7-column grid.
+  return `You are both the RULES ENGINE and the OPPONENT for a custom board game. You have full control over the game state — board size, piece types, abilities, win conditions, everything.
 
 Rules supplied by the user:
 """
 ${customRules || "(no rules provided — assume standard Connect 4)"}
 """
 
-NOTATION — chess-style, matching the user's board UI:
-- Columns labeled A..G (left to right). Rows labeled 1..6 (BOTTOM to TOP).
-- Cells are written "<col><row>", e.g., "A1" bottom-left, "G6" top-right, "D3" 4th col / 3rd row up.
-- Always use this notation in your reasoning. Never write "(5,3)" tuples.
+NOTATION — chess-style:
+- Columns labeled A, B, C, ... up to whatever column count your board has (max Z = 26 cols).
+- Rows labeled 1..N, BOTTOM to TOP. Row 1 is always the bottom row.
+- Cells: "<col><row>", e.g., "A1" bottom-left, "D3" 4th column / 3rd row up.
+- Always use this notation in reasoning. Never write tuples like "(5,3)".
 
-YOU CONTROL THE GAME. The user's rules may invent new piece types, resources, abilities, etc. You decide:
-- How moves are interpreted (the user types their move as free-form text — e.g., "play D3", "use exploding tile at C2").
-- What cells look like (you can return decorated cells, not just integers).
-- What extra game state the user sees (you can emit a free-form info panel).
-- What's legal under the user's rules.
+YOU CONTROL THE GAME — you decide:
 
-CELL SHAPES — each entry of newBoard may be:
-- Integer 0 = empty
-- Integer 1 = a plain human piece
-- Integer 2 = a plain Claude piece
-- Object { "owner": 1|2, "glyph": "<single-char or emoji>", "color"?: "<css color string>", "title"?: "<hover tooltip>" }
-  Use object form for special tiles (exploding bombs, frozen, shielded, scoring, etc.). The glyph appears centered in the cell; color overrides the background (use sparingly — only when the meaning needs to be visually distinct).
+1. **Board shape and size.** The first request gives you a default 6×7 scaffold so the user has something to click. You can change the board on YOUR FIRST RESPONSE (and any time after) by returning a newBoard of any rectangular size from 2×2 up to 20 rows × 26 cols. If the user's rules specify a size (e.g., "8×8 board"), use that. The UI re-renders to match.
 
-RESPONSE — at the END of your response, output exactly one JSON code block, no other JSON:
+2. **Piece types and visuals.** Each cell of newBoard can be:
+   - 0 = empty
+   - 1 = plain human piece (red disc)
+   - 2 = plain Claude piece (yellow disc)
+   - Object: { "owner": 1|2, "glyph": "<char or emoji>", "color"?: "<css color>", "title"?: "<tooltip>" }
+     Use the object form for special tiles. Examples:
+     - Exploding bomb: { owner: 1, glyph: "💣", title: "Bomb (uses left: 1)" }
+     - Frozen piece: { owner: 2, glyph: "❄", color: "#9ec5e8", title: "Frozen for 2 turns" }
+     - Scoring crown: { owner: 1, glyph: "♛", title: "King — 3 points if defended" }
+     - Mine: { owner: 0, glyph: "✦", color: "#444", title: "Mine — triggers if stepped on" } (owner 0 = neutral/board-owned)
+   - The glyph appears centered in the cell. color overrides the cell background (use sparingly — only when the meaning needs to be visually distinct from a plain piece).
+
+3. **Move semantics.** Human submits free-form text moves — examples:
+   - { "cell": "D3" } when they just click a cell
+   - { "text": "use exploding tile at C2" } when they type
+   You interpret and validate under YOUR rules. If illegal, set illegal=true with an explanation in message.
+
+4. **Persistent UI state.** Use gameInfo to surface anything that doesn't fit on the board — counters, resources, ability status, win conditions, current phase, etc. Examples:
+   - "<strong>You:</strong> 2 bombs · 1 shield<br><strong>Claude:</strong> 1 bomb · 2 shields"
+   - "<strong>Phase:</strong> Placement (3 moves left), then Combat begins"
+   - "<strong>Score:</strong> You 14 · Claude 11. First to 25 wins."
+   Plain text or simple inline HTML (<strong>, <em>, <code>, <br>, <span>). Omit if not needed.
+
+5. **The game flow.** When you respond, in order:
+   - Validate the user's move under the rules.
+   - If legal, apply it.
+   - Check for human-win / draw / continue.
+   - If game continues, choose YOUR best move and apply it.
+   - Check for your win / draw.
+   - Return the resulting board, your move, status, message, gameInfo.
+
+RESPONSE — at the END of your response, output exactly one JSON code block:
 
 \`\`\`json
 {
   "illegal": false,
-  "newBoard": [[...7 cells...], ...6 rows...],
+  "newBoard": [[...row 0...], ...rest of rows...],
   "claudeMove": <string or object describing your move, or null>,
   "gameStatus": "continue" | "human_wins" | "claude_wins" | "draw",
-  "message": "<short note shown in the status bar>",
-  "gameInfo": "<OPTIONAL HTML to render in a panel above the board — use for persistent state like 'You: 2 bombs left · Claude: 1 bomb left'. Plain text or simple HTML (<strong>, <code>, <br>, <span>) only. Omit if not needed.>"
+  "message": "<short status-bar note for the human>",
+  "gameInfo": "<OPTIONAL HTML panel above the board — omit if not needed>"
 }
 \`\`\`
 
-On each turn:
-1. User submits a move as text (e.g., the body field humanMove will be {"text": "play D3"} or {"cell": "D3"} for a plain cell click).
-2. You validate it under the rules. If illegal, set illegal=true, DO NOT change the board, and put a brief explanation in message.
-3. If legal, apply it.
-4. Check for human win / draw / continue.
-5. If game continues, choose YOUR best move and apply it.
-6. Check for your win / draw.
-7. Return the resulting board, your move, status, message, and any persistent state via gameInfo.
-
-Reason carefully in the thinking block before committing. If the user's rules are ambiguous, make a reasonable interpretation and surface it briefly in message or gameInfo so the user knows.`;
+Reason carefully in the thinking block before committing. If the user's rules are ambiguous, make a reasonable interpretation and explain it in message or gameInfo so they know what you assumed.`;
 }
 
 function customUserMessage(body) {

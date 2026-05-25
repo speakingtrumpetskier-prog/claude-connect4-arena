@@ -48,10 +48,11 @@ const VARIANT_DESCRIPTIONS = {
   custom: "<strong>You write the rules; Claude enforces them and plays.</strong> Describe your variant in plain English in the box below. Claude validates each of your moves, makes its own move, and returns the new board.",
 };
 
-// Chess-style notation: columns A..G (left → right), rows 1..6 (bottom → top).
-// Internal arrays use row 0 = top, col 0 = left. Convert at every boundary.
-function colName(c) { return String.fromCharCode(65 + c); }            // 0→"A", 6→"G"
-function rowName(r) { return String(ROWS - r); }                       // r=0→"6", r=5→"1"
+// Chess-style notation: columns A..Z (left → right), rows 1..N (bottom → top).
+// Standard variants use 7 cols × 6 rows; custom variants can resize. Internal
+// arrays use row 0 = top, col 0 = left. Convert at every boundary.
+function colName(c) { return String.fromCharCode(65 + c); }            // 0→"A", 25→"Z"
+function rowName(r, totalRows = ROWS) { return String(totalRows - r); }// r=0 → "<totalRows>", r=N-1 → "1"
 function colIdx(letter) {
   const s = String(letter).toUpperCase().trim();
   if (!/^[A-G]$/.test(s)) return NaN;
@@ -62,7 +63,7 @@ function rowIdx(num) {
   if (isNaN(n) || n < 1 || n > ROWS) return NaN;
   return ROWS - n;
 }
-function cellChess(r, c) { return `${colName(c)}${rowName(r)}`; }
+function cellChess(r, c, totalRows = ROWS) { return `${colName(c)}${rowName(r, totalRows)}`; }
 
 // ---------- State ----------
 let state = null;
@@ -353,11 +354,14 @@ function maybeFlipGravity() {
 //   row 8:        [   ][   ][ ▲][ ▲][ ▲][ ▲][ ▲][ ▲][ ▲][   ]   <- bottom drops
 function render() {
   boardEl.innerHTML = "";
-  const gridRows = 2 + ROWS + 1;   // col-labels + top-drops + cells + bottom-drops
-  const gridCols = 2 + COLS + 1;   // row-labels + left-drops + cells + right-drops
+  // Custom variant may resize the board — use the actual dimensions from state.
+  const R = state.board.length;
+  const C = state.board[0] ? state.board[0].length : COLS;
+  const gridRows = 2 + R + 1;   // col-labels + top-drops + cells + bottom-drops
+  const gridCols = 2 + C + 1;   // row-labels + left-drops + cells + right-drops
   // Compact strip for labels so they sit close to the drop arrows, not a full cell away.
-  boardEl.style.gridTemplateColumns = `22px 36px repeat(${COLS}, 52px) 36px`;
-  boardEl.style.gridTemplateRows    = `18px 36px repeat(${ROWS}, 52px) 36px`;
+  boardEl.style.gridTemplateColumns = `22px 36px repeat(${C}, 52px) 36px`;
+  boardEl.style.gridTemplateRows    = `18px 36px repeat(${R}, 52px) 36px`;
 
   const moves = state.variant === "custom" ? null : legalMoves();
   const isSupported = (edge, internalIdx) => {
@@ -402,7 +406,7 @@ function render() {
       }
 
       if (isColLabelRow) { const el = label(colName(c - 2)); el.classList.add("col-label"); boardEl.appendChild(el); continue; }
-      if (isRowLabelCol) { const el = label(rowName(r - 2)); el.classList.add("row-label"); boardEl.appendChild(el); continue; }
+      if (isRowLabelCol) { const el = label(rowName(r - 2, R)); el.classList.add("row-label"); boardEl.appendChild(el); continue; }
       if (isTopDropRow)    { const i = c - 2; boardEl.appendChild(makeDrop("top",    i, "▼", dropStateFor("top",    i))); continue; }
       if (isBottomDropRow) { const i = c - 2; boardEl.appendChild(makeDrop("bottom", i, "▲", dropStateFor("bottom", i))); continue; }
       if (isLeftDropCol)   { const i = r - 2; boardEl.appendChild(makeDrop("left",   i, "▶", dropStateFor("left",   i))); continue; }
@@ -527,7 +531,7 @@ function onDropClick(edge, internalIdx) {
 
 function onCustomCellClick(row, col) {
   if (state.gameOver || state.pendingClaude || state.turn !== 1) return;
-  doHumanMove({ cell: cellChess(row, col) });
+  doHumanMove({ cell: cellChess(row, col, state.board.length) });
 }
 
 function doHumanMove(move) {
@@ -873,14 +877,20 @@ function parseClaudeMove(text) {
 function parseCustomResult(text) {
   const fence = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/);
   let candidate = fence ? fence[1] : text;
-  // Greedy match for the LAST JSON object (Claude may include intermediate
-  // examples in its prose; we want the final-decision block).
   const all = candidate.match(/\{[\s\S]*\}/);
   if (!all) return null;
   try {
     const obj = JSON.parse(all[0]);
     if (!obj.newBoard || !Array.isArray(obj.newBoard)) return null;
-    if (obj.newBoard.length !== ROWS || obj.newBoard[0].length !== COLS) return null;
+    // Accept any rectangular board up to a reasonable cap (custom variants can resize).
+    const R = obj.newBoard.length;
+    if (R < 2 || R > 20) return null;
+    if (!Array.isArray(obj.newBoard[0])) return null;
+    const C = obj.newBoard[0].length;
+    if (C < 2 || C > 26) return null;
+    for (const row of obj.newBoard) {
+      if (!Array.isArray(row) || row.length !== C) return null;
+    }
     return obj;
   } catch { return null; }
 }
