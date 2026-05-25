@@ -23,13 +23,17 @@ const customRulesEl = $("#custom-rules");
 const gravityIndicator = $("#gravity-indicator");
 const streamingIndicator = $("#streaming-indicator");
 const variantNameEl = $("#variant-name");
-const timerHumanEl = $("#timer-human");
-const timerClaudeEl = $("#timer-claude");
-const timerHumanClock = timerHumanEl.querySelector(".clock");
-const timerClaudeClock = timerClaudeEl.querySelector(".clock");
 const gameInfoEl = $("#game-info");
 const customActionForm = $("#custom-action");
 const customActionInput = $("#custom-action-input");
+
+// Stub elements for removed timer UI — kept as no-ops so existing code paths
+// don't need to be sprinkled with null-checks.
+const _stub = { classList: { add(){}, remove(){}, toggle(){} }, textContent: "" };
+const timerHumanEl = _stub;
+const timerClaudeEl = _stub;
+const timerHumanClock = _stub;
+const timerClaudeClock = _stub;
 
 const TIME_PER_PLAYER_MS = 60 * 1000;
 let tickerHandle = null;
@@ -110,67 +114,12 @@ function newGame() {
   if (state.turn === 2) requestClaudeMove();
 }
 
-function startTicker() {
-  if (tickerHandle) return;
-  tickerHandle = setInterval(tick, 100);
-}
-function stopTicker() {
-  if (tickerHandle) { clearInterval(tickerHandle); tickerHandle = null; }
-}
-
-function tick() {
-  if (!state || state.gameOver || !state.started) return;
-  const now = Date.now();
-  const elapsed = now - state.turnStart;
-  state.turnStart = now;
-  if (state.pendingClaude || state.turn === 2) {
-    state.timeClaude = Math.max(0, state.timeClaude - elapsed);
-  } else if (state.turn === 1) {
-    state.timeHuman = Math.max(0, state.timeHuman - elapsed);
-  }
-  renderTimers();
-  if (state.timeHuman <= 0) timeoutLoss(1);
-  else if (state.timeClaude <= 0) timeoutLoss(2);
-}
-
-function timeoutLoss(loser) {
-  if (state.gameOver) return;
-  state.gameOver = true;
-  state.winner = loser === 1 ? 2 : 1;
-  // Cancel any in-flight Claude request — its response would otherwise apply
-  // a move after the clock already expired.
-  if (state.abortController) {
-    try { state.abortController.abort(); } catch {}
-    state.abortController = null;
-  }
-  state.pendingClaude = false;
-  streamingIndicator.hidden = true;
-  stopTicker();
-  const el = loser === 1 ? timerHumanEl : timerClaudeEl;
-  el.classList.add("expired");
-  render();
-  if (loser === 1) setStatus("You timed out. Claude wins.", "win-claude");
-  else setStatus("Claude timed out. You win.", "win-human");
-}
-
-function fmtClock(ms) {
-  const totalSec = Math.ceil(ms / 1000);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
-function renderTimers() {
-  timerHumanClock.textContent = fmtClock(state.timeHuman);
-  timerClaudeClock.textContent = fmtClock(state.timeClaude);
-  const running = state.started && !state.gameOver;
-  const humanActive = running && state.turn === 1 && !state.pendingClaude;
-  const claudeActive = running && (state.turn === 2 || state.pendingClaude);
-  timerHumanEl.classList.toggle("active", humanActive);
-  timerClaudeEl.classList.toggle("active", claudeActive);
-  timerHumanEl.classList.toggle("low", running && state.timeHuman > 0 && state.timeHuman < 15000);
-  timerClaudeEl.classList.toggle("low", running && state.timeClaude > 0 && state.timeClaude < 15000);
-}
+// Timer feature removed — these are no-ops kept so existing call sites compile.
+function startTicker() {}
+function stopTicker() {}
+function tick() {}
+function timeoutLoss() {}
+function renderTimers() {}
 
 // ---------- Gravity vectors ----------
 const GRAVITY_VECTORS = [
@@ -621,15 +570,6 @@ async function requestClaudeMove() {
   if (state.gameOver) return;
   state.pendingClaude = true;
   state.abortController = new AbortController();
-  // Force-move safety: abort the stream a few seconds before the clock expires
-  // so we always have time to apply a fallback move within Claude's budget.
-  const FORCE_BUFFER_MS = 5000;
-  const forceAt = Math.max(2000, state.timeClaude - FORCE_BUFFER_MS);
-  const forceHandle = setTimeout(() => {
-    if (state.abortController) {
-      try { state.abortController.abort(); } catch {}
-    }
-  }, forceAt);
   setStatus("Claude is thinking…", "thinking");
   thinkingEl.textContent = "";
   thinkingEl.classList.remove("empty");
@@ -653,9 +593,8 @@ async function requestClaudeMove() {
   try {
     finalText = await streamClaude(body, state.abortController.signal);
   } catch (err) {
-    clearTimeout(forceHandle);
     if (state.gameOver) return;
-    // If we force-aborted before any bytes arrived, fall through to fallback.
+    // If aborted (e.g., game ended mid-stream) fall through; otherwise surface.
     if (err.name !== "AbortError") {
       setStatus(err.message, "error");
       state.pendingClaude = false;
@@ -664,7 +603,6 @@ async function requestClaudeMove() {
       return;
     }
   }
-  clearTimeout(forceHandle);
   if (state.gameOver) return;
   streamingIndicator.hidden = true;
   state.pendingClaude = false;
