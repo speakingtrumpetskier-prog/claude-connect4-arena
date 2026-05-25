@@ -22,6 +22,14 @@ function systemPromptForVariant(variant, opts = {}) {
 The board is shown as a text grid where H = human piece, C = your piece, . = empty.
 Row 0 is the TOP row. Column 0 is the LEFT column.
 
+NOTATION — IMPORTANT for matching what the user sees:
+- Refer to cells as "r<row> c<col>", e.g., "r5 c3", NOT as "(5,3)" or "(row, col)" tuples.
+  The user's board UI labels rows as r0..r5 and columns as c0..c6, and tuple form is ambiguous (row-col vs x-y).
+- Refer to moves using the move format described below for the variant
+  (e.g., "top c3", "left r2"), matching the on-board labels.
+- When mentioning multiple cells (e.g., a diagonal threat), list them as
+  "r2 c0 → r3 c1 → r4 c2 → r5 c3" with explicit r/c labels.
+
 You are playing as C. You must win or block the human. Think carefully about
 threats, forks, tempo, and the geometry of this specific variant. Reason about
 candidate moves and only commit when you are confident.
