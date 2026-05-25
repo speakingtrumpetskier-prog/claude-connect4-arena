@@ -27,7 +27,7 @@ const variantNameEl = $("#variant-name");
 
 const VARIANT_NAMES = {
   classic: "Classic Connect 4",
-  diagonal: "Diagonal Gravity · drop top or left",
+  diagonal: "Diagonal Gravity",
   flip: "Gravity Flip",
   custom: "Custom Rules",
 };
@@ -318,20 +318,8 @@ function render() {
       cell.className = "cell";
       cell.dataset.row = br;
       cell.dataset.col = bc;
-      cell.dataset.coord = coordLabel(br, bc);
-      if (v === 1) {
-        cell.classList.add("piece-human");
-        const g = document.createElement("span");
-        g.className = "glyph";
-        g.textContent = "L";
-        cell.appendChild(g);
-      } else if (v === 2) {
-        cell.classList.add("piece-claude");
-        const g = document.createElement("span");
-        g.className = "glyph";
-        g.textContent = "C";
-        cell.appendChild(g);
-      }
+      if (v === 1) cell.classList.add("piece-human");
+      else if (v === 2) cell.classList.add("piece-claude");
       if (state.winningCells.some(([wr, wc]) => wr === br && wc === bc)) cell.classList.add("win");
       // Custom variant: click any empty cell.
       if (state.variant === "custom" && v === 0 && interactive) {
@@ -353,14 +341,10 @@ function render() {
   }
 }
 
-function makeDrop(edge, index, _arrow, enabled) {
+function makeDrop(edge, index, arrow, enabled) {
   const el = document.createElement("div");
   el.className = "drop" + (enabled ? "" : " disabled");
-  // Label with column letter / row number rather than arrow glyphs.
-  let label;
-  if (edge === "top" || edge === "bottom") label = COL_LABELS[index];
-  else label = String(ROWS - index);
-  el.textContent = label;
+  el.textContent = arrow;
   el.dataset.edge = edge;
   el.dataset.index = index;
   if (enabled) el.addEventListener("click", () => onDropClick(edge, index));
@@ -453,7 +437,7 @@ function logAdd(who, text) {
 async function requestClaudeMove() {
   if (state.gameOver) return;
   state.pendingClaude = true;
-  setStatus("Claude is thinking…");
+  setStatus("Claude is thinking…", "thinking");
   thinkingEl.textContent = "";
   thinkingEl.classList.remove("empty");
   streamingIndicator.hidden = false;
@@ -505,7 +489,7 @@ async function requestClaudeMove() {
 async function requestClaudeCustomMove(humanMove) {
   if (state.gameOver) return;
   state.pendingClaude = true;
-  setStatus("Claude is thinking…");
+  setStatus("Claude is thinking…", "thinking");
   thinkingEl.textContent = "";
   streamingIndicator.hidden = false;
   render();
