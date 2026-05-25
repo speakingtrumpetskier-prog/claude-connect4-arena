@@ -3,80 +3,95 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Connect 4 Arena — vs. Claude Opus 4.7</title>
+  <title>Connect 4 · Arena — vs. Claude Opus 4.7</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <header>
-    <h1>Connect&nbsp;4 Arena</h1>
-    <p class="subtitle">Twisted variants vs. Claude Opus 4.7 — with visible thinking.</p>
+    <div>
+      <h1>Connect 4 <span class="amp">·</span> Arena</h1>
+      <p class="subtitle">Adversarial games against Claude Opus 4.7 · Extended thinking visible</p>
+    </div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-swatch human"></span>You</span>
+      <span class="legend-item"><span class="legend-swatch claude"></span>Claude</span>
+    </div>
   </header>
 
   <main>
-    <section class="controls">
-      <label>
-        Variant
-        <select id="variant">
-          <option value="classic">Classic Connect 4</option>
-          <option value="diagonal" selected>Diagonal Gravity (drop top or left)</option>
-          <option value="flip">Gravity Flip (rotates every N turns)</option>
-          <option value="custom">Custom Rules (Claude is rules engine)</option>
-        </select>
-      </label>
+    <div class="left-col">
+      <section class="card accent">
+        <p class="card-label">Settings</p>
+        <div class="controls">
+          <div class="field">
+            <span class="field-label">Variant</span>
+            <select id="variant">
+              <option value="classic">Classic Connect 4</option>
+              <option value="diagonal" selected>Diagonal Gravity</option>
+              <option value="flip">Gravity Flip</option>
+              <option value="custom">Custom Rules</option>
+            </select>
+          </div>
 
-      <label id="flip-n-wrap" hidden>
-        Flip every
-        <input id="flip-n" type="number" min="1" max="20" value="3" /> turns
-      </label>
+          <div class="field" id="flip-n-wrap" hidden>
+            <span class="field-label">Flip every</span>
+            <input id="flip-n" type="number" min="1" max="20" value="3" />
+          </div>
 
-      <label>
-        Thinking budget
-        <input id="budget" type="range" min="1024" max="20000" step="512" value="6000" />
-        <span id="budget-val">6000</span> tokens
-      </label>
+          <div class="field">
+            <span class="field-label">Thinking budget</span>
+            <input id="budget" type="range" min="1024" max="20000" step="512" value="6000" />
+            <span class="budget-readout"><span id="budget-val">6000</span> tokens</span>
+          </div>
 
-      <label>
-        Who goes first?
-        <select id="first">
-          <option value="human" selected>You</option>
-          <option value="claude">Claude</option>
-        </select>
-      </label>
+          <div class="field">
+            <span class="field-label">Opening</span>
+            <select id="first">
+              <option value="human" selected>You</option>
+              <option value="claude">Claude</option>
+            </select>
+          </div>
 
-      <button id="new-game">New game</button>
-    </section>
-
-    <section id="custom-rules-wrap" hidden>
-      <label>
-        Custom rules (plain English — Claude validates moves and plays against you)
-        <textarea id="custom-rules" rows="5" placeholder="e.g. 7x6 board. Players alternate placing pieces in any empty cell. After every move, all pieces shift one cell clockwise around the board perimeter (interior pieces don't move). First to get 4 in a row (horizontal, vertical, or diagonal) wins."></textarea>
-      </label>
-    </section>
-
-    <section class="game">
-      <div class="board-wrap">
-        <div id="gravity-indicator" class="gravity-indicator" hidden></div>
-        <div id="board" class="board" aria-label="Game board"></div>
-        <div id="status" class="status">Your move.</div>
-      </div>
-
-      <aside class="thinking-panel">
-        <div class="panel-header">
-          <h2>Claude's thinking</h2>
-          <span id="streaming-indicator" class="streaming-indicator" hidden>● live</span>
+          <button id="new-game">New game</button>
         </div>
-        <div id="thinking" class="thinking">Make a move to see Claude reason.</div>
-        <div class="panel-header"><h2>Move log</h2></div>
+      </section>
+
+      <section class="card" id="custom-rules-wrap" hidden>
+        <p class="card-label">Custom rules · Claude is rules engine</p>
+        <textarea id="custom-rules" rows="5" placeholder="e.g. 7×6 board. Players alternate placing pieces in any empty cell. After every move, all pieces shift one cell clockwise around the board perimeter (interior pieces don't move). First to get 4 in a row (horizontal, vertical, or diagonal) wins."></textarea>
+      </section>
+
+      <section class="card board-wrap">
+        <div class="board-meta">
+          <span id="variant-name">Diagonal Gravity</span>
+          <span id="gravity-indicator" class="gravity-indicator" hidden></span>
+        </div>
+        <div id="board" class="board" aria-label="Game board"></div>
+        <div id="status" class="status">Your move</div>
+      </section>
+    </div>
+
+    <div class="right-col">
+      <section class="card">
+        <div class="panel-header">
+          <p class="card-label">Analysis · live</p>
+          <span id="streaming-indicator" class="streaming-indicator" hidden>thinking</span>
+        </div>
+        <div id="thinking" class="thinking empty">Make a move. Claude's reasoning will stream here, line by line, as it considers candidate moves and their consequences.</div>
+      </section>
+
+      <section class="card">
+        <div class="panel-header">
+          <p class="card-label">Move log</p>
+        </div>
         <div id="log" class="log"></div>
-      </aside>
-    </section>
+      </section>
+    </div>
   </main>
 
   <footer>
-    <p>
-      Source on <a href="https://github.com/speakingtrumpetskier-prog/claude-connect4-arena" target="_blank" rel="noopener">GitHub</a>.
-      Model: <code>claude-opus-4-7</code> with extended thinking.
-    </p>
+    <span>Source · <a href="https://github.com/speakingtrumpetskier-prog/claude-connect4-arena" target="_blank" rel="noopener">github.com/speakingtrumpetskier-prog/claude-connect4-arena</a></span>
+    <span>Model · <code>claude-opus-4-7</code> · extended thinking</span>
   </footer>
 
   <script type="module" src="/app.js"></script>

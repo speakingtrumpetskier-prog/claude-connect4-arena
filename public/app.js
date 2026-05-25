@@ -23,6 +23,20 @@ const customWrap = $("#custom-rules-wrap");
 const customRulesEl = $("#custom-rules");
 const gravityIndicator = $("#gravity-indicator");
 const streamingIndicator = $("#streaming-indicator");
+const variantNameEl = $("#variant-name");
+
+const VARIANT_NAMES = {
+  classic: "Classic Connect 4",
+  diagonal: "Diagonal Gravity · drop top or left",
+  flip: "Gravity Flip",
+  custom: "Custom Rules",
+};
+
+const COL_LABELS = ["a", "b", "c", "d", "e", "f", "g"];
+function coordLabel(r, c) {
+  // Chess-style: column letter + (ROWS - row) so bottom row is "1".
+  return `${COL_LABELS[c]}${ROWS - r}`;
+}
 
 // ---------- State ----------
 let state = null;
@@ -47,8 +61,10 @@ function newGame() {
     customRules: customRulesEl.value.trim(),
     pendingClaude: false,
   };
-  thinkingEl.textContent = "Make a move to see Claude reason.";
+  thinkingEl.textContent = "Make a move. Claude's reasoning will stream here, line by line, as it considers candidate moves and their consequences.";
+  thinkingEl.classList.add("empty");
   logEl.innerHTML = "";
+  variantNameEl.textContent = VARIANT_NAMES[state.variant] || state.variant;
   render();
   setStatus(state.turn === 1 ? "Your move." : "Claude moves first…");
   if (state.turn === 2) requestClaudeMove();
@@ -302,8 +318,20 @@ function render() {
       cell.className = "cell";
       cell.dataset.row = br;
       cell.dataset.col = bc;
-      if (v === 1) cell.classList.add("piece-human");
-      if (v === 2) cell.classList.add("piece-claude");
+      cell.dataset.coord = coordLabel(br, bc);
+      if (v === 1) {
+        cell.classList.add("piece-human");
+        const g = document.createElement("span");
+        g.className = "glyph";
+        g.textContent = "L";
+        cell.appendChild(g);
+      } else if (v === 2) {
+        cell.classList.add("piece-claude");
+        const g = document.createElement("span");
+        g.className = "glyph";
+        g.textContent = "C";
+        cell.appendChild(g);
+      }
       if (state.winningCells.some(([wr, wc]) => wr === br && wc === bc)) cell.classList.add("win");
       // Custom variant: click any empty cell.
       if (state.variant === "custom" && v === 0 && interactive) {
@@ -325,10 +353,14 @@ function render() {
   }
 }
 
-function makeDrop(edge, index, arrow, enabled) {
+function makeDrop(edge, index, _arrow, enabled) {
   const el = document.createElement("div");
   el.className = "drop" + (enabled ? "" : " disabled");
-  el.textContent = arrow;
+  // Label with column letter / row number rather than arrow glyphs.
+  let label;
+  if (edge === "top" || edge === "bottom") label = COL_LABELS[index];
+  else label = String(ROWS - index);
+  el.textContent = label;
   el.dataset.edge = edge;
   el.dataset.index = index;
   if (enabled) el.addEventListener("click", () => onDropClick(edge, index));
@@ -404,10 +436,16 @@ function setStatus(text, klass) {
 }
 
 function logAdd(who, text) {
-  const div = document.createElement("div");
-  div.className = "entry " + (who === "human" ? "human" : who === "claude" ? "claude" : "");
-  div.textContent = text;
-  logEl.appendChild(div);
+  const num = document.createElement("div");
+  num.className = "num";
+  // Number every player move (system entries get a bullet).
+  const moveNum = [...logEl.querySelectorAll(".move")].filter(e => !e.classList.contains("system")).length + 1;
+  num.textContent = who === "system" ? "·" : moveNum + ".";
+  const move = document.createElement("div");
+  move.className = "move " + who;
+  move.textContent = text;
+  logEl.appendChild(num);
+  logEl.appendChild(move);
   logEl.scrollTop = logEl.scrollHeight;
 }
 
@@ -417,6 +455,7 @@ async function requestClaudeMove() {
   state.pendingClaude = true;
   setStatus("Claude is thinking…");
   thinkingEl.textContent = "";
+  thinkingEl.classList.remove("empty");
   streamingIndicator.hidden = false;
   render();
 
@@ -434,7 +473,7 @@ async function requestClaudeMove() {
   try {
     finalText = await streamClaude(body);
   } catch (err) {
-    setStatus("Claude error: " + err.message);
+    setStatus(err.message, "error");
     state.pendingClaude = false;
     streamingIndicator.hidden = true;
     render();
@@ -484,7 +523,7 @@ async function requestClaudeCustomMove(humanMove) {
   try {
     finalText = await streamClaude(body);
   } catch (err) {
-    setStatus("Claude error: " + err.message);
+    setStatus(err.message, "error");
     state.pendingClaude = false;
     streamingIndicator.hidden = true;
     render();
@@ -537,6 +576,9 @@ async function streamClaude(body) {
   });
   if (!resp.ok) {
     const text = await resp.text();
+    if (resp.status === 501 || text.trim().startsWith("<")) {
+      throw new Error("API endpoint not running. Deploy to Vercel (with ANTHROPIC_API_KEY env var), or run `vercel dev` locally — Python http.server can't run /api/move.");
+    }
     throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
   }
   const reader = resp.body.getReader();
@@ -610,6 +652,7 @@ budgetInput.addEventListener("input", () => { budgetVal.textContent = budgetInpu
 variantSel.addEventListener("change", () => {
   flipNWrap.hidden = variantSel.value !== "flip";
   customWrap.hidden = variantSel.value !== "custom";
+  variantNameEl.textContent = VARIANT_NAMES[variantSel.value] || variantSel.value;
 });
 newGameBtn.addEventListener("click", newGame);
 
