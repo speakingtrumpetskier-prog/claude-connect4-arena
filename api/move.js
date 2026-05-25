@@ -149,30 +149,42 @@ NOTATION — chess-style, matching the user's board UI:
 - Cells are written "<col><row>", e.g., "A1" bottom-left, "G6" top-right, "D3" 4th col / 3rd row up.
 - Always use this notation in your reasoning. Never write "(5,3)" tuples.
 
-The board is represented INTERNALLY as a 2D array of integers: 0 = empty, 1 = human (H), 2 = you (C). Array row 0 is the TOP (chess row "6"); array column 0 is the LEFT (chess col "A").
+YOU CONTROL THE GAME. The user's rules may invent new piece types, resources, abilities, etc. You decide:
+- How moves are interpreted (the user types their move as free-form text — e.g., "play D3", "use exploding tile at C2").
+- What cells look like (you can return decorated cells, not just integers).
+- What extra game state the user sees (you can emit a free-form info panel).
+- What's legal under the user's rules.
 
-On each turn:
-1. The user proposes a move (specifying a cell, or whatever the rules require).
-2. You validate it under the rules. If illegal, report illegal=true and DO NOT change the board.
-3. If legal, apply it.
-4. Check for human win / draw.
-5. If game continues, choose YOUR best move and apply it.
-6. Check for your win / draw.
-7. Return the resulting board.
+CELL SHAPES — each entry of newBoard may be:
+- Integer 0 = empty
+- Integer 1 = a plain human piece
+- Integer 2 = a plain Claude piece
+- Object { "owner": 1|2, "glyph": "<single-char or emoji>", "color"?: "<css color string>", "title"?: "<hover tooltip>" }
+  Use object form for special tiles (exploding bombs, frozen, shielded, scoring, etc.). The glyph appears centered in the cell; color overrides the background (use sparingly — only when the meaning needs to be visually distinct).
 
-At the END of your response, output exactly one JSON code block, no other JSON:
+RESPONSE — at the END of your response, output exactly one JSON code block, no other JSON:
 
 \`\`\`json
 {
   "illegal": false,
-  "newBoard": [[...7 ints...], ...6 rows...],
-  "claudeMove": <object describing your move, or null>,
+  "newBoard": [[...7 cells...], ...6 rows...],
+  "claudeMove": <string or object describing your move, or null>,
   "gameStatus": "continue" | "human_wins" | "claude_wins" | "draw",
-  "message": "<short note for the human>"
+  "message": "<short note shown in the status bar>",
+  "gameInfo": "<OPTIONAL HTML to render in a panel above the board — use for persistent state like 'You: 2 bombs left · Claude: 1 bomb left'. Plain text or simple HTML (<strong>, <code>, <br>, <span>) only. Omit if not needed.>"
 }
 \`\`\`
 
-Reason carefully and show your reasoning in the thinking block before committing.`;
+On each turn:
+1. User submits a move as text (e.g., the body field humanMove will be {"text": "play D3"} or {"cell": "D3"} for a plain cell click).
+2. You validate it under the rules. If illegal, set illegal=true, DO NOT change the board, and put a brief explanation in message.
+3. If legal, apply it.
+4. Check for human win / draw / continue.
+5. If game continues, choose YOUR best move and apply it.
+6. Check for your win / draw.
+7. Return the resulting board, your move, status, message, and any persistent state via gameInfo.
+
+Reason carefully in the thinking block before committing. If the user's rules are ambiguous, make a reasonable interpretation and surface it briefly in message or gameInfo so the user knows.`;
 }
 
 function customUserMessage(body) {

@@ -27,6 +27,9 @@ const timerHumanEl = $("#timer-human");
 const timerClaudeEl = $("#timer-claude");
 const timerHumanClock = timerHumanEl.querySelector(".clock");
 const timerClaudeClock = timerClaudeEl.querySelector(".clock");
+const gameInfoEl = $("#game-info");
+const customActionForm = $("#custom-action");
+const customActionInput = $("#custom-action-input");
 
 const TIME_PER_PLAYER_MS = 60 * 1000;
 let tickerHandle = null;
@@ -88,9 +91,11 @@ function newGame() {
     turnStart: Date.now(),
     started: true,
   };
-  thinkingEl.textContent = "Make a move. Claude's reasoning will stream here, line by line, as it considers candidate moves and their consequences.";
+  thinkingEl.textContent = "";
   thinkingEl.classList.add("empty");
   logEl.innerHTML = "";
+  gameInfoEl.hidden = true;
+  gameInfoEl.innerHTML = "";
   variantNameEl.textContent = VARIANT_NAMES[state.variant] || state.variant;
   timerHumanEl.classList.remove("expired", "low");
   timerClaudeEl.classList.remove("expired", "low");
@@ -411,8 +416,21 @@ function render() {
       cell.dataset.col = bc;
       if (v === 1) cell.classList.add("piece-human");
       else if (v === 2) cell.classList.add("piece-claude");
+      else if (v && typeof v === "object") {
+        if (v.owner === 1) cell.classList.add("piece-human");
+        else if (v.owner === 2) cell.classList.add("piece-claude");
+        if (v.color) cell.style.background = v.color;
+        if (v.glyph) {
+          const g = document.createElement("span");
+          g.className = "cell-glyph";
+          g.textContent = v.glyph;
+          cell.appendChild(g);
+        }
+        if (v.title) cell.title = v.title;
+      }
       if (state.winningCells.some(([wr, wc]) => wr === br && wc === bc)) cell.classList.add("win");
-      if (state.variant === "custom" && v === 0 && interactive) {
+      const isEmpty = (v === 0 || v === null || v === undefined);
+      if (state.variant === "custom" && isEmpty && interactive) {
         cell.classList.add("clickable");
         cell.addEventListener("click", () => onCustomCellClick(br, bc));
       }
@@ -745,9 +763,19 @@ async function requestClaudeCustomMove(humanMove) {
     return;
   }
   state.board = result.newBoard;
+  if (result.gameInfo) {
+    gameInfoEl.hidden = false;
+    gameInfoEl.innerHTML = result.gameInfo;
+  } else {
+    gameInfoEl.hidden = true;
+    gameInfoEl.innerHTML = "";
+  }
   if (result.claudeMove) {
     state.history.push({ player: 2, move: result.claudeMove });
-    logAdd("claude", `Claude: ${JSON.stringify(result.claudeMove)}`);
+    const desc = typeof result.claudeMove === "string"
+      ? result.claudeMove
+      : (result.claudeMove.text || JSON.stringify(result.claudeMove));
+    logAdd("claude", `Claude: ${desc}`);
   }
   state.moveCount += 2;
   if (result.gameStatus === "human_wins") {
@@ -845,12 +873,13 @@ function parseClaudeMove(text) {
 function parseCustomResult(text) {
   const fence = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/);
   let candidate = fence ? fence[1] : text;
-  const brace = candidate.match(/\{[\s\S]*\}/);
-  if (!brace) return null;
+  // Greedy match for the LAST JSON object (Claude may include intermediate
+  // examples in its prose; we want the final-decision block).
+  const all = candidate.match(/\{[\s\S]*\}/);
+  if (!all) return null;
   try {
-    const obj = JSON.parse(brace[0]);
+    const obj = JSON.parse(all[0]);
     if (!obj.newBoard || !Array.isArray(obj.newBoard)) return null;
-    // Sanity: shape check.
     if (obj.newBoard.length !== ROWS || obj.newBoard[0].length !== COLS) return null;
     return obj;
   } catch { return null; }
@@ -865,14 +894,28 @@ function updateVariantDesc() {
 variantSel.addEventListener("change", () => {
   flipNWrap.hidden = variantSel.value !== "flip";
   customWrap.hidden = variantSel.value !== "custom";
+  customActionForm.hidden = variantSel.value !== "custom";
   variantNameEl.textContent = VARIANT_NAMES[variantSel.value] || variantSel.value;
   updateVariantDesc();
+  // If the game hasn't started yet, refresh the board so it reflects the new
+  // variant (drop arrows, gravity badge, etc.) instead of the previous one.
+  if (state && !state.started) initBoard();
+});
+
+customActionForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = customActionInput.value.trim();
+  if (!text) return;
+  if (state.gameOver || state.pendingClaude || state.turn !== 1) return;
+  customActionInput.value = "";
+  doHumanMove({ text });
 });
 newGameBtn.addEventListener("click", newGame);
 
 // Initial.
 flipNWrap.hidden = variantSel.value !== "flip";
 customWrap.hidden = variantSel.value !== "custom";
+customActionForm.hidden = variantSel.value !== "custom";
 updateVariantDesc();
 initBoard();
 

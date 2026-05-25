@@ -77,8 +77,13 @@
           </div>
         </div>
         <div id="gravity-indicator" class="gravity-indicator" hidden style="align-self: flex-end;"></div>
+        <div id="game-info" class="game-info" hidden></div>
         <div id="board" class="board" aria-label="Game board"></div>
         <div id="status" class="status">Your move</div>
+        <form id="custom-action" class="custom-action" hidden>
+          <input id="custom-action-input" type="text" placeholder="Describe your move — e.g., 'play D3' or 'use exploding tile at C2'" autocomplete="off" />
+          <button type="submit" id="custom-action-submit">Play</button>
+        </form>
       </section>
     </div>
 
@@ -88,7 +93,7 @@
           <p class="section-label">Claude's thinking</p>
           <span id="streaming-indicator" class="streaming-indicator" hidden>live</span>
         </div>
-        <div id="thinking" class="thinking empty">Make a move and Claude's reasoning will stream here as it considers candidates.</div>
+        <div id="thinking" class="thinking empty"></div>
       </section>
 
       <section class="section">

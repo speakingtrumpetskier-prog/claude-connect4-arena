@@ -424,6 +424,62 @@ button:active { transform: translateY(1px); }
 }
 .cell.clickable:hover { background: rgba(63, 123, 214, 0.16); }
 
+/* Decorated cells for custom variants (Claude can return cells with a glyph) */
+.cell .cell-glyph {
+  font-size: 22px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 0 rgba(0,0,0,0.18));
+}
+.cell.piece-human .cell-glyph,
+.cell.piece-claude .cell-glyph { color: #fff; }
+
+/* Custom-game info panel — anything Claude wants to surface beyond the board */
+.game-info {
+  width: 100%;
+  background: rgba(63, 123, 214, 0.08);
+  border: 1px solid rgba(63, 123, 214, 0.22);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.45;
+}
+.game-info[hidden] { display: none !important; }
+.game-info strong { color: var(--blue-deep); }
+.game-info code {
+  background: rgba(63, 123, 214, 0.12);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+/* Custom-variant text-input action bar */
+.custom-action {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+.custom-action[hidden] { display: none !important; }
+.custom-action input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font: 14px var(--sans);
+  color: var(--text);
+}
+.custom-action input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(63, 123, 214, 0.16);
+}
+.custom-action button {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
 .status {
   font-size: 14px;
   color: var(--muted);
