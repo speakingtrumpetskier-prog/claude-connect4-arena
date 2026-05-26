@@ -17,6 +17,20 @@ if (!canvas) {
   const ROWS = 6, COLS = 7;
   let cellW = 0, cellH = 0, puckR = 0;
 
+  // Modes the background cycles through after each full-board kick.
+  const MODES = ["classic", "diagonal", "rotate"];
+  let modeIdx = 0;
+  // For "rotate" mode: gravity rotates clockwise (down → left → up → right) every N spawns.
+  const GRAVITY_VECTORS = [
+    { dr:  1, dc:  0, name: "down"  },
+    { dr:  0, dc: -1, name: "left"  },
+    { dr: -1, dc:  0, name: "up"    },
+    { dr:  0, dc:  1, name: "right" },
+  ];
+  let gravityIdx = 0;
+  let gravitySpawnCount = 0;
+  const GRAVITY_ROTATE_INTERVAL = 5;
+
   function dpr() { return window.devicePixelRatio || 1; }
   function resize() {
     const r = dpr();
@@ -65,30 +79,87 @@ if (!canvas) {
     return lines;
   }
 
-  function spawnPuck(now) {
-    // A column is a valid spawn target only if (a) its top settled cell is empty
-    // AND (b) no in-flight puck is already heading into it. Otherwise pucks
-    // visually overlap because we only account for settled positions.
-    const candidates = [];
-    for (let c = 0; c < COLS; c++) {
-      if (board.grid[0][c] !== 0) continue;
-      const inFlight = board.pucks.some(p => !p.settled && p.col === c);
-      if (!inFlight) candidates.push(c);
+  // Common helper: spawn a puck that enters at `entryR, entryC`, slides along
+  // (dr, dc) until it hits a wall or an occupied cell, and lands there.
+  // Returns true if spawned.
+  function spawnSliding(entryR, entryC, dr, dc) {
+    if (entryR < 0 || entryR >= ROWS || entryC < 0 || entryC >= COLS) return false;
+    if (board.grid[entryR][entryC] !== 0) return false;
+    // Slide to find the landing cell.
+    let tr = entryR, tc = entryC;
+    while (true) {
+      const nr = tr + dr, nc = tc + dc;
+      if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) break;
+      if (board.grid[nr][nc] !== 0) break;
+      tr = nr; tc = nc;
     }
-    if (!candidates.length) return;
-    const col = candidates[Math.floor(Math.random() * candidates.length)];
-    let landRow = ROWS - 1;
-    while (landRow >= 0 && board.grid[landRow][col] !== 0) landRow--;
-    if (landRow < 0) return;
+    // Don't spawn if any in-flight puck is heading to the same target cell or
+    // shares the same entry line under the same direction (avoids overlaps).
+    const sameTarget = board.pucks.some(p => !p.settled && p.targetRow === tr && p.targetCol === tc);
+    if (sameTarget) return false;
+    const sameEntry = board.pucks.some(p => !p.settled
+      && p.entryRow === entryR && p.entryCol === entryC
+      && p.dirR === dr && p.dirC === dc);
+    if (sameEntry) return false;
     const player = Math.random() < 0.5 ? 1 : 2;
+    const speed = cellH * 0.77;
+    // Pixel-space velocity from cell-space direction (cellH ≈ cellW for full-viewport board, close enough).
+    const stepW = (dc === 0 ? cellH : cellW);
+    const stepH = (dr === 0 ? cellW : cellH);
+    const lenCells = Math.hypot(dr, dc) || 1;
+    const vx = (dc / lenCells) * speed;
+    const vy = (dr / lenCells) * speed;
+    // Start one cell outside the entry along the negative direction.
+    const startX = (entryC + 0.5) * cellW - (dc / lenCells) * Math.max(cellW, cellH) * 0.7;
+    const startY = (entryR + 0.5) * cellH - (dr / lenCells) * Math.max(cellW, cellH) * 0.7;
     board.pucks.push({
-      col, targetRow: landRow,
-      y: -cellH * 0.5,
-      vy: cellH * 0.77,   // +40% gentle-but-firmer constant velocity
+      x: startX, y: startY,
+      vx, vy,
+      targetCol: tc, targetRow: tr,
+      targetX: (tc + 0.5) * cellW,
+      targetY: (tr + 0.5) * cellH,
+      entryRow: entryR, entryCol: entryC,
+      dirR: dr, dirC: dc,
       player,
       settled: false,
-      bornAt: now,
     });
+    return true;
+  }
+
+  function spawnPuck() {
+    const mode = MODES[modeIdx];
+    if (mode === "classic") {
+      // Drop from top of a random open column; gravity (+1, 0).
+      const cols = [];
+      for (let c = 0; c < COLS; c++) if (board.grid[0][c] === 0) cols.push(c);
+      if (!cols.length) return;
+      const c = cols[Math.floor(Math.random() * cols.length)];
+      spawnSliding(0, c, 1, 0);
+    } else if (mode === "diagonal") {
+      // Drop from top edge OR left edge; gravity (+1, +1).
+      const entries = [];
+      for (let c = 0; c < COLS; c++) if (board.grid[0][c] === 0) entries.push([0, c]);
+      for (let r = 0; r < ROWS; r++) if (board.grid[r][0] === 0) entries.push([r, 0]);
+      if (!entries.length) return;
+      const [r, c] = entries[Math.floor(Math.random() * entries.length)];
+      spawnSliding(r, c, 1, 1);
+    } else if (mode === "rotate") {
+      const g = GRAVITY_VECTORS[gravityIdx];
+      // Drop from the edge OPPOSITE to gravity direction.
+      const entries = [];
+      if (g.dr === 1) for (let c = 0; c < COLS; c++) { if (board.grid[0][c] === 0) entries.push([0, c]); }
+      else if (g.dr === -1) for (let c = 0; c < COLS; c++) { if (board.grid[ROWS-1][c] === 0) entries.push([ROWS-1, c]); }
+      else if (g.dc === 1) for (let r = 0; r < ROWS; r++) { if (board.grid[r][0] === 0) entries.push([r, 0]); }
+      else if (g.dc === -1) for (let r = 0; r < ROWS; r++) { if (board.grid[r][COLS-1] === 0) entries.push([r, COLS-1]); }
+      if (!entries.length) return;
+      const [r, c] = entries[Math.floor(Math.random() * entries.length)];
+      if (spawnSliding(r, c, g.dr, g.dc)) {
+        gravitySpawnCount++;
+        if (gravitySpawnCount % GRAVITY_ROTATE_INTERVAL === 0) {
+          gravityIdx = (gravityIdx + 1) % 4;
+        }
+      }
+    }
   }
 
   function cellCenter(r, c) {
@@ -158,19 +229,25 @@ if (!canvas) {
     // --- Update board ---
     if (board.state === "filling" && t > board.nextSpawnAt) {
       const inFlight = board.pucks.filter(p => !p.settled).length;
-      if (inFlight < 2) spawnPuck(t);
+      if (inFlight < 2) spawnPuck();
       board.nextSpawnAt = t + 950 + Math.random() * 800;
     }
 
     for (const p of board.pucks) {
       if (p.settled) continue;
-      // Gentle constant downward velocity; no acceleration, no trail.
+      // Gentle constant velocity along (vx, vy); arrival detected when the
+      // remaining-distance vector has dot product ≤ 0 with the velocity
+      // (i.e., we've passed the target along the motion axis).
+      p.x += p.vx * dt;
       p.y += p.vy * dt;
-      const targetY = (p.targetRow + 0.5) * cellH;
-      if (p.y >= targetY) {
-        p.y = targetY;
+      const rx = p.targetX - p.x, ry = p.targetY - p.y;
+      const dot = rx * p.vx + ry * p.vy;
+      if (dot <= 0) {
+        p.x = p.targetX; p.y = p.targetY;
         p.settled = true;
-        if (board.grid[p.targetRow][p.col] === 0) board.grid[p.targetRow][p.col] = p.player;
+        if (board.grid[p.targetRow][p.targetCol] === 0) {
+          board.grid[p.targetRow][p.targetCol] = p.player;
+        }
       }
     }
 
@@ -187,7 +264,11 @@ if (!canvas) {
       kickBoardPieces();
       board.glowingLines = [];
       board.state = "filling";
-      board.nextSpawnAt = t + 1800;
+      // 6-second pause before the next round starts, AND the variant cycles.
+      board.nextSpawnAt = t + 6000;
+      modeIdx = (modeIdx + 1) % MODES.length;
+      gravityIdx = 0;
+      gravitySpawnCount = 0;
     }
 
     // --- Draw board ---
@@ -199,11 +280,10 @@ if (!canvas) {
         drawPuck(cx, cy, v, 0.32, 1);
       }
     }
-    // Falling pucks — single disc, no trail (avoids the "second perimeter" look).
+    // Falling pucks — single disc, no trail.
     for (const p of board.pucks) {
       if (p.settled) continue;
-      const cx = p.col * cellW + cellW / 2;
-      drawPuck(cx, p.y, p.player, 0.32, 1);
+      drawPuck(p.x, p.y, p.player, 0.32, 1);
     }
     // 4-in-a-row glow — subtle: a gentle pulse on the four pucks, no halo / line / sparkles.
     for (const line of board.glowingLines) {
