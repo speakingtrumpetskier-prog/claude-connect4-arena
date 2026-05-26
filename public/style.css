@@ -39,6 +39,18 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Ambient Connect-4 background — pucks drop & stack in ghost boards.
+   Sits behind everything; main content cards (white) naturally hide it. */
+#bg-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+}
+header, main, footer { position: relative; z-index: 1; }
+
 ::selection { background: rgba(63, 123, 214, 0.22); }
 
 a { color: var(--blue); text-decoration: none; }

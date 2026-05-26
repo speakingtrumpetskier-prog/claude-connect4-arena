@@ -678,6 +678,8 @@ function celebrate(winner) {
     body.classList.add("claude-wins");
     setTimeout(() => body.classList.remove("claude-wins"), 2200);
   }
+  // Ambient background also celebrates: a rain of themed pucks.
+  if (typeof window.bgBurst === "function") window.bgBurst(winner);
 }
 
 const CONFETTI_COLORS = ["#e85655", "#f0bf3a", "#3f7bd6", "#5ea671", "#9879d4", "#f08a4d"];

@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
   <header>
     <div>
       <h1><span class="dot"></span><span class="dot y"></span> Connect 4 Arena</h1>
@@ -95,6 +96,7 @@
     <span>Model — <code>claude-opus-4-7</code> with extended thinking</span>
   </footer>
 
+  <script type="module" src="/bg.js"></script>
   <script type="module" src="/app.js"></script>
 </body>
 </html>
