@@ -12,10 +12,7 @@ if (!canvas) {
 
   // Classic Connect-4 plastic palette: deep cobalt board, cherry red + cobalt blue pucks.
   const RED = "#e3554f";
-  const RED_DEEP = "#a32a2a";
   const BLUE = "#2e6bd6";
-  const BLUE_DEEP = "#1d3d80";
-  const FRAME_TINT = "rgba(46, 107, 214, 0.06)"; // very faint blue plastic wash
 
   const ROWS = 6, COLS = 7;
   let cellW = 0, cellH = 0, puckR = 0;
@@ -94,38 +91,12 @@ if (!canvas) {
   }
 
   // ---------- Drawing helpers ----------
-  function drawHole(cx, cy) {
-    // Faint plastic-hole rim with subtle inset
-    const g = ctx.createRadialGradient(cx - puckR * 0.2, cy - puckR * 0.2, 0, cx, cy, puckR);
-    g.addColorStop(0, "rgba(255,255,255,0.05)");
-    g.addColorStop(1, "rgba(0, 30, 80, 0.08)");
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(cx, cy, puckR, 0, Math.PI * 2); ctx.fill();
-    // Subtle dark ring
-    ctx.strokeStyle = "rgba(20, 30, 60, 0.08)";
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(cx, cy, puckR, 0, Math.PI * 2); ctx.stroke();
-  }
-
-  function drawPuck(cx, cy, player, alpha = 0.20, scale = 1) {
+  // Flat pieces — no gradient, no glossy highlight, no visible empty cells.
+  function drawPuck(cx, cy, player, alpha = 0.22, scale = 1) {
     const r = puckR * scale;
     const baseColor = player === 1 ? RED : BLUE;
-    const deepColor = player === 1 ? RED_DEEP : BLUE_DEEP;
-    // Radial gradient: bright top-left, deeper bottom-right
-    const g = ctx.createRadialGradient(
-      cx - r * 0.35, cy - r * 0.35, r * 0.1,
-      cx + r * 0.1, cy + r * 0.1, r * 1.05
-    );
-    g.addColorStop(0, hexAlpha(baseColor, Math.min(1, alpha * 1.6)));
-    g.addColorStop(0.6, hexAlpha(baseColor, alpha));
-    g.addColorStop(1, hexAlpha(deepColor, alpha * 0.9));
-    ctx.fillStyle = g;
+    ctx.fillStyle = hexAlpha(baseColor, alpha);
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-    // Glossy highlight (small white crescent top-left)
-    ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.35})`;
-    ctx.beginPath();
-    ctx.arc(cx - r * 0.32, cy - r * 0.4, r * 0.35, 0, Math.PI * 2);
-    ctx.fill();
   }
 
   function hexAlpha(hex, a) {
@@ -167,10 +138,6 @@ if (!canvas) {
     lastT = t;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Faint plastic frame tint over the whole viewport (suggests Connect-4 board)
-    ctx.fillStyle = FRAME_TINT;
-    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-
     // --- Update board ---
     if (board.state === "filling" && t > board.nextSpawnAt) {
       const inFlight = board.pucks.filter(p => !p.settled).length;
@@ -201,9 +168,9 @@ if (!canvas) {
     // Transition: full → glow → sweep → reset
     if (board.state === "filling" && isFull(board.grid)) {
       const lines = findWinningLines(board.grid);
-      board.glowingLines = lines.map(l => ({ ...l, until: t + 2200, born: t }));
+      board.glowingLines = lines.map(l => ({ ...l, until: t + 1200, born: t }));
       board.state = "glowing";
-      board.sweepStart = t + 2200;
+      board.sweepStart = t + 1200;
     }
     if (board.state === "glowing" && t >= board.sweepStart) {
       board.state = "sweeping";
@@ -218,14 +185,7 @@ if (!canvas) {
     }
 
     // --- Draw board ---
-    // Empty holes
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        const [cx, cy] = cellCenter(r, c);
-        drawHole(cx, cy);
-      }
-    }
-    // Settled pucks (with sweep fade)
+    // Settled pucks (with sweep fade) — no visible empty cells; pucks just settle into invisible spots.
     const sweepFrac = board.state === "sweeping" ? Math.min(1, (t - board.sweepStart) / 900) : 0;
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
@@ -257,48 +217,17 @@ if (!canvas) {
       }
       drawPuck(cx, p.y, p.player, 0.28, 1);
     }
-    // 4-in-a-row glow
+    // 4-in-a-row glow — subtle: a gentle pulse on the four pucks, no halo / line / sparkles.
     for (const line of board.glowingLines) {
       const remaining = line.until - t;
       if (remaining <= 0) continue;
-      const age = (t - line.born) / 1000;
-      const pulse = 0.55 + 0.4 * Math.sin(t * 0.012);
-      const a = Math.min(1, remaining / 800) * pulse;
+      const pulse = 0.55 + 0.35 * Math.sin(t * 0.006);
+      const a = Math.min(1, remaining / 600) * pulse * 0.18;
       const colHex = line.color === 1 ? RED : BLUE;
-      // Glow line
-      ctx.strokeStyle = hexAlpha(colHex, a * 0.85);
-      ctx.lineWidth = 6;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      for (let i = 0; i < line.cells.length; i++) {
-        const [r, c] = line.cells[i];
-        const [cx, cy] = cellCenter(r, c);
-        if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
-      }
-      ctx.stroke();
-      // Halo
       for (const [r, c] of line.cells) {
         const [cx, cy] = cellCenter(r, c);
-        const g = ctx.createRadialGradient(cx, cy, puckR * 0.5, cx, cy, puckR * 1.8);
-        g.addColorStop(0, hexAlpha(colHex, a * 0.45));
-        g.addColorStop(1, hexAlpha(colHex, 0));
-        ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(cx, cy, puckR * 1.8, 0, Math.PI * 2); ctx.fill();
-      }
-      // Sparkles emanating from line cells in the first ~0.6s
-      if (age < 0.6) {
-        const sparkA = (0.6 - age) / 0.6;
-        for (const [r, c] of line.cells) {
-          const [cx, cy] = cellCenter(r, c);
-          for (let i = 0; i < 4; i++) {
-            const ang = age * 4 + i * (Math.PI / 2);
-            const dist = puckR * (1 + age * 3);
-            const sx = cx + Math.cos(ang) * dist;
-            const sy = cy + Math.sin(ang) * dist;
-            ctx.fillStyle = `rgba(255, 255, 255, ${sparkA * 0.6})`;
-            ctx.beginPath(); ctx.arc(sx, sy, 2.5, 0, Math.PI * 2); ctx.fill();
-          }
-        }
+        ctx.fillStyle = hexAlpha(colHex, a);
+        ctx.beginPath(); ctx.arc(cx, cy, puckR * 1.15, 0, Math.PI * 2); ctx.fill();
       }
     }
 
