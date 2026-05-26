@@ -66,8 +66,15 @@ if (!canvas) {
   }
 
   function spawnPuck(now) {
+    // A column is a valid spawn target only if (a) its top settled cell is empty
+    // AND (b) no in-flight puck is already heading into it. Otherwise pucks
+    // visually overlap because we only account for settled positions.
     const candidates = [];
-    for (let c = 0; c < COLS; c++) if (board.grid[0][c] === 0) candidates.push(c);
+    for (let c = 0; c < COLS; c++) {
+      if (board.grid[0][c] !== 0) continue;
+      const inFlight = board.pucks.some(p => !p.settled && p.col === c);
+      if (!inFlight) candidates.push(c);
+    }
     if (!candidates.length) return;
     const col = candidates[Math.floor(Math.random() * candidates.length)];
     let landRow = ROWS - 1;
@@ -77,11 +84,10 @@ if (!canvas) {
     board.pucks.push({
       col, targetRow: landRow,
       y: -cellH * 0.5,
-      vy: cellH * 0.55,   // gentle constant-ish speed; no gravity acceleration
+      vy: cellH * 0.77,   // +40% gentle-but-firmer constant velocity
       player,
       settled: false,
       bornAt: now,
-      trail: [],
     });
   }
 
@@ -104,19 +110,16 @@ if (!canvas) {
     return `rgba(${r}, ${g}, ${b}, ${a})`;
   }
 
-  // ---------- Win celebration: kick every settled puck out of the scene ----------
-  // Like a child swept the board: each piece flies off in a random direction
-  // under gravity, leaving the viewport.
+  // ---------- Kick: every settled puck flies out of the scene ----------
+  // Used both by the natural full-board cycle and by game-win celebrations.
   const burstPucks = [];
-  function startBurst(_winner) {
+  function kickBoardPieces() {
     const W = window.innerWidth, H = window.innerHeight;
     const cxScene = W / 2, cyScene = H * 0.55;
-    // Capture every settled puck on the board and convert into a flying particle.
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const v = board.grid[r][c]; if (!v) continue;
         const [px, py] = cellCenter(r, c);
-        // Velocity points outward from the scene center, with a strong upward kick.
         const dx = px - cxScene, dy = py - cyScene;
         const dist = Math.max(1, Math.hypot(dx, dy));
         const outX = dx / dist, outY = dy / dist;
@@ -134,14 +137,16 @@ if (!canvas) {
         });
       }
     }
-    // Empty the board and let it start refilling slowly after a beat.
     board.grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
     board.pucks = [];
+  }
+  // Game-win celebration: same kick + a 1.8s pause before the bg refills.
+  window.bgBurst = function (_winner) {
+    kickBoardPieces();
     board.glowingLines = [];
     board.state = "filling";
     board.nextSpawnAt = performance.now() + 1800;
-  }
-  window.bgBurst = startBurst;
+  };
 
   // ---------- Main loop ----------
   let lastT = performance.now();
@@ -159,10 +164,7 @@ if (!canvas) {
 
     for (const p of board.pucks) {
       if (p.settled) continue;
-      // Trail history (subtle motion blur)
-      p.trail.push(p.y);
-      if (p.trail.length > 3) p.trail.shift();
-      // Gentle constant downward velocity; no acceleration.
+      // Gentle constant downward velocity; no acceleration, no trail.
       p.y += p.vy * dt;
       const targetY = (p.targetRow + 0.5) * cellH;
       if (p.y >= targetY) {
@@ -172,48 +174,36 @@ if (!canvas) {
       }
     }
 
-    // Transition: full → glow → sweep → reset
+    // Transition: full → brief glow → KICK → empty → refill.
+    // The fade-sweep is gone; instead the board "wins" by being full and then
+    // all the pucks get kicked out of the scene.
     if (board.state === "filling" && isFull(board.grid)) {
       const lines = findWinningLines(board.grid);
-      board.glowingLines = lines.map(l => ({ ...l, until: t + 1200, born: t }));
+      board.glowingLines = lines.map(l => ({ ...l, until: t + 900, born: t }));
       board.state = "glowing";
-      board.sweepStart = t + 1200;
+      board.sweepStart = t + 900;
     }
     if (board.state === "glowing" && t >= board.sweepStart) {
-      board.state = "sweeping";
-      board.sweepStart = t;
-    }
-    if (board.state === "sweeping" && t - board.sweepStart > 900) {
-      board.grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
-      board.pucks = [];
+      kickBoardPieces();
       board.glowingLines = [];
       board.state = "filling";
-      board.nextSpawnAt = t + 500;
+      board.nextSpawnAt = t + 1800;
     }
 
     // --- Draw board ---
-    // Settled pucks (with sweep fade) — no visible empty cells, no bounce on settle.
-    const sweepFrac = board.state === "sweeping" ? Math.min(1, (t - board.sweepStart) / 900) : 0;
+    // Settled pucks — flat, no fade. Pieces leave via the kick, not a sweep.
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const v = board.grid[r][c]; if (!v) continue;
         const [cx, cy] = cellCenter(r, c);
-        const fade = board.state === "sweeping"
-          ? Math.max(0, 1 - Math.max(0, (sweepFrac * (ROWS + 1.5) - r)) / 1.4)
-          : 1;
-        drawPuck(cx, cy, v, 0.32 * fade, 1);
+        drawPuck(cx, cy, v, 0.32, 1);
       }
     }
-    // Falling pucks: motion trail + main disc
+    // Falling pucks — single disc, no trail (avoids the "second perimeter" look).
     for (const p of board.pucks) {
       if (p.settled) continue;
       const cx = p.col * cellW + cellW / 2;
-      // Trail
-      for (let i = 0; i < p.trail.length; i++) {
-        const trailAlpha = 0.18 * ((i + 1) / p.trail.length) * 0.5;
-        drawPuck(cx, p.trail[i], p.player, trailAlpha, 0.92);
-      }
-      drawPuck(cx, p.y, p.player, 0.28, 1);
+      drawPuck(cx, p.y, p.player, 0.32, 1);
     }
     // 4-in-a-row glow — subtle: a gentle pulse on the four pucks, no halo / line / sparkles.
     for (const line of board.glowingLines) {

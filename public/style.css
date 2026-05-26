@@ -378,26 +378,17 @@ button:active { transform: translateY(1px); }
 
 /* ---------- Game-end celebrations ---------- */
 
-/* Evil — when Claude wins. Violent shake + creeping red vignette. */
-@keyframes shake-evil {
-  0%, 100% { transform: translate(0, 0) rotate(0); }
-  6%  { transform: translate(-14px, -4px) rotate(-0.5deg); }
-  12% { transform: translate(15px, 6px) rotate(0.4deg); }
-  18% { transform: translate(-12px, 10px) rotate(-0.4deg); }
-  24% { transform: translate(11px, -10px) rotate(0.5deg); }
-  30% { transform: translate(-8px, 7px) rotate(-0.3deg); }
-  36% { transform: translate(13px, -6px) rotate(0.3deg); }
-  42% { transform: translate(-10px, -9px) rotate(-0.2deg); }
-  48% { transform: translate(8px, 10px) rotate(0.2deg); }
-  54% { transform: translate(-6px, -5px); }
-  60% { transform: translate(7px, 4px); }
-  66% { transform: translate(-4px, 6px); }
-  72% { transform: translate(5px, -3px); }
-  80% { transform: translate(-3px, 2px); }
-  90% { transform: translate(2px, -1px); }
+/* Gloomy — when Claude wins. Slow desaturation/dim + soft vignette + gentle pulse.
+   No flashes, no violent shake — meant to feel deflating, not startling. */
+@keyframes claude-gloom {
+  0%   { filter: brightness(1)    saturate(1);    transform: translate(0, 0); }
+  30%  { filter: brightness(0.92) saturate(0.78); transform: translate(-1.5px, 1px); }
+  55%  { filter: brightness(0.88) saturate(0.7);  transform: translate(1px, 0); }
+  80%  { filter: brightness(0.95) saturate(0.88); transform: translate(0, 0); }
+  100% { filter: brightness(1)    saturate(1);    transform: translate(0, 0); }
 }
 body.claude-wins {
-  animation: shake-evil 1.2s ease-in-out 1;
+  animation: claude-gloom 2.4s ease-in-out 1;
 }
 body.claude-wins::before {
   content: "";
@@ -405,35 +396,19 @@ body.claude-wins::before {
   inset: 0;
   pointer-events: none;
   z-index: 9998;
-  background:
-    radial-gradient(ellipse at center, transparent 35%, rgba(80, 8, 8, 0.85) 100%);
-  animation: vignette-pulse 1.6s ease-out 1;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(40, 32, 32, 0.5) 100%);
+  animation: vignette-slow 2.4s ease-in-out 1;
 }
-body.claude-wins::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9999;
-  background: rgba(196, 30, 30, 0.18);
-  animation: flash-red 0.18s steps(2) 4;
-}
-@keyframes vignette-pulse {
-  0%   { opacity: 0; }
-  20%  { opacity: 1; }
-  100% { opacity: 0.55; }
-}
-@keyframes flash-red {
+@keyframes vignette-slow {
   0%, 100% { opacity: 0; }
   50%      { opacity: 1; }
 }
 body.claude-wins .cell.piece-claude {
-  animation: claude-glow 1.2s ease-out 1;
+  animation: claude-soft-glow 2s ease-in-out 1;
 }
-@keyframes claude-glow {
-  0%   { box-shadow: 0 0 0 0 rgba(240, 191, 58, 0); }
-  30%  { box-shadow: 0 0 24px 8px rgba(240, 191, 58, 0.9), inset 0 -2px 4px rgba(0,0,0,0.2); }
-  100% { box-shadow: 0 0 0 0 rgba(240, 191, 58, 0); }
+@keyframes claude-soft-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(240, 191, 58, 0); }
+  50%      { box-shadow: 0 0 16px 3px rgba(240, 191, 58, 0.4); }
 }
 
 /* Joyful — when human wins. Board bounce + confetti. */
