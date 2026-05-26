@@ -1,6 +1,6 @@
-// Ambient Connect-4 background. Ghost boards scattered around the viewport
-// where pucks slowly drop & stack. When a board fills, any 4-in-a-row briefly
-// glows, then the board sweeps clean and starts over.
+// Ambient Connect-4 background. ONE big board that fills the viewport,
+// pucks drop and stack with sheen / trails / settle-bounce. When the board
+// fills, 4-in-a-rows pulse, then the board sweeps and starts over.
 //
 // Exposes window.bgBurst(winner) for the win-celebration puck rain.
 
@@ -10,11 +10,15 @@ if (!canvas) {
 } else {
   const ctx = canvas.getContext("2d");
 
-  const RED = "#e85655";
-  const YELLOW = "#f0bf3a";
-  const RED_FAINT = "rgba(232, 86, 85, 0.14)";
-  const YELLOW_FAINT = "rgba(240, 191, 58, 0.14)";
-  const EMPTY = "rgba(20, 18, 14, 0.04)";
+  // Classic Connect-4 plastic palette: deep cobalt board, cherry red + cobalt blue pucks.
+  const RED = "#e3554f";
+  const RED_DEEP = "#a32a2a";
+  const BLUE = "#2e6bd6";
+  const BLUE_DEEP = "#1d3d80";
+  const FRAME_TINT = "rgba(46, 107, 214, 0.06)"; // very faint blue plastic wash
+
+  const ROWS = 6, COLS = 7;
+  let cellW = 0, cellH = 0, puckR = 0;
 
   function dpr() { return window.devicePixelRatio || 1; }
   function resize() {
@@ -22,49 +26,27 @@ if (!canvas) {
     canvas.width = window.innerWidth * r;
     canvas.height = window.innerHeight * r;
     ctx.setTransform(r, 0, 0, r, 0, 0);
-    layoutBoards();
+    cellW = window.innerWidth / COLS;
+    cellH = window.innerHeight / ROWS;
+    puckR = Math.min(cellW, cellH) * 0.42;
   }
   window.addEventListener("resize", resize);
 
-  // Ghost boards
-  const PUCK_R = 12;
-  const CELL = PUCK_R * 2 + 2;
-  const ROWS = 6, COLS = 7;
-  const boards = [];
+  // Single full-viewport board.
+  const board = {
+    grid: Array.from({ length: ROWS }, () => Array(COLS).fill(0)),
+    pucks: [],          // falling: {col, targetRow, y, vy, player, settled, bounceT}
+    nextSpawnAt: 0,
+    glowingLines: [],   // {cells, color, until, born}
+    state: "filling",   // "filling" | "glowing" | "sweeping"
+    sweepStart: 0,
+  };
 
-  function makeBoard(x, y) {
-    return {
-      x, y,
-      grid: Array.from({ length: ROWS }, () => Array(COLS).fill(0)),
-      pucks: [],          // falling pucks: {col, targetRow, y, player}
-      nextSpawnAt: 0,
-      glowingLines: [],   // {cells:[[r,c]…], until: t}
-      state: "filling",   // "filling" | "glowing" | "sweeping"
-      sweepStart: 0,
-    };
+  function isFull(grid) {
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (!grid[r][c]) return false;
+    return true;
   }
 
-  function layoutBoards() {
-    boards.length = 0;
-    const W = window.innerWidth, H = window.innerHeight;
-    const boardW = COLS * CELL, boardH = ROWS * CELL;
-    // Place boards in the page gutters: top-left, top-right, bottom-left,
-    // bottom-right of the viewport, plus mid-left + mid-right when there's room.
-    const positions = [];
-    positions.push([16, 16]);                            // top-left
-    positions.push([W - boardW - 16, 16]);               // top-right
-    positions.push([16, H - boardH - 16]);               // bottom-left
-    positions.push([W - boardW - 16, H - boardH - 16]); // bottom-right
-    if (H > 1100) {
-      positions.push([16, Math.floor(H / 2 - boardH / 2)]);
-      positions.push([W - boardW - 16, Math.floor(H / 2 - boardH / 2)]);
-    }
-    for (const [x, y] of positions) boards.push(makeBoard(x, y));
-    // Stagger initial spawn so they don't pulse in unison.
-    boards.forEach((b, i) => { b.nextSpawnAt = performance.now() + i * 350; });
-  }
-
-  // 4-in-a-row scan after a board fills.
   function findWinningLines(grid) {
     const lines = [];
     const dirs = [[0,1],[1,0],[1,1],[1,-1]];
@@ -86,13 +68,7 @@ if (!canvas) {
     return lines;
   }
 
-  function isFull(grid) {
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (!grid[r][c]) return false;
-    return true;
-  }
-
-  function spawnPuckOn(board) {
-    // Pick a column that isn't full yet.
+  function spawnPuck(now) {
     const candidates = [];
     for (let c = 0; c < COLS; c++) if (board.grid[0][c] === 0) candidates.push(c);
     if (!candidates.length) return;
@@ -101,153 +77,241 @@ if (!canvas) {
     while (landRow >= 0 && board.grid[landRow][col] !== 0) landRow--;
     if (landRow < 0) return;
     const player = Math.random() < 0.5 ? 1 : 2;
-    board.pucks.push({ col, targetRow: landRow, y: -CELL, player });
+    board.pucks.push({
+      col, targetRow: landRow,
+      y: -cellH * 0.5,
+      vy: cellH * 0.6,    // initial speed; accelerates under gravity
+      player,
+      settled: false,
+      bounceT: 0,         // when > 0, run bounce animation
+      bornAt: now,
+      trail: [],          // recent y positions for motion trail
+    });
   }
 
-  // Win-celebration burst: a transient set of pucks that rain across the
-  // viewport (not bound to a ghost board).
-  const burstPucks = []; // {x, y, vy, color, ay, alpha}
+  function cellCenter(r, c) {
+    return [c * cellW + cellW / 2, r * cellH + cellH / 2];
+  }
+
+  // ---------- Drawing helpers ----------
+  function drawHole(cx, cy) {
+    // Faint plastic-hole rim with subtle inset
+    const g = ctx.createRadialGradient(cx - puckR * 0.2, cy - puckR * 0.2, 0, cx, cy, puckR);
+    g.addColorStop(0, "rgba(255,255,255,0.05)");
+    g.addColorStop(1, "rgba(0, 30, 80, 0.08)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, puckR, 0, Math.PI * 2); ctx.fill();
+    // Subtle dark ring
+    ctx.strokeStyle = "rgba(20, 30, 60, 0.08)";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, cy, puckR, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  function drawPuck(cx, cy, player, alpha = 0.20, scale = 1) {
+    const r = puckR * scale;
+    const baseColor = player === 1 ? RED : BLUE;
+    const deepColor = player === 1 ? RED_DEEP : BLUE_DEEP;
+    // Radial gradient: bright top-left, deeper bottom-right
+    const g = ctx.createRadialGradient(
+      cx - r * 0.35, cy - r * 0.35, r * 0.1,
+      cx + r * 0.1, cy + r * 0.1, r * 1.05
+    );
+    g.addColorStop(0, hexAlpha(baseColor, Math.min(1, alpha * 1.6)));
+    g.addColorStop(0.6, hexAlpha(baseColor, alpha));
+    g.addColorStop(1, hexAlpha(deepColor, alpha * 0.9));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    // Glossy highlight (small white crescent top-left)
+    ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.35})`;
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.32, cy - r * 0.4, r * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function hexAlpha(hex, a) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
+  }
+
+  // ---------- Win burst ----------
+  const burstPucks = [];
   function startBurst(winner) {
     const W = window.innerWidth, H = window.innerHeight;
-    const color = winner === 1 ? RED : (winner === 2 ? YELLOW : RED);
-    const altColor = winner === 1 ? YELLOW : (winner === 2 ? RED : YELLOW);
-    const n = 90;
+    // Map game winners (1 = human / red, 2 = claude) to bg colors.
+    // Claude is yellow in main UI but blue in bg theme — keep red vs blue.
+    const dominant = winner === 1 ? 1 : 2;
+    const off = dominant === 1 ? 2 : 1;
+    const n = 110;
     for (let i = 0; i < n; i++) {
       burstPucks.push({
         x: Math.random() * W,
-        y: -20 - Math.random() * H * 0.5,
-        vy: 60 + Math.random() * 120,    // px/sec
-        ay: 200,                          // gravity-like
-        r: 8 + Math.random() * 6,
-        color: Math.random() < 0.7 ? color : altColor,
-        alpha: 0.22 + Math.random() * 0.18,
+        y: -40 - Math.random() * H * 0.6,
+        vy: 80 + Math.random() * 160,
+        vx: (Math.random() - 0.5) * 60,
+        ay: 280,
+        r: puckR * (0.5 + Math.random() * 0.55),
+        player: Math.random() < 0.78 ? dominant : off,
+        alpha: 0.28 + Math.random() * 0.22,
         spin: Math.random() * Math.PI * 2,
-        spinRate: (Math.random() - 0.5) * 4,
+        spinRate: (Math.random() - 0.5) * 6,
       });
     }
   }
   window.bgBurst = startBurst;
 
-  // Main loop
+  // ---------- Main loop ----------
   let lastT = performance.now();
   function tick(t) {
-    const dt = Math.min(50, t - lastT) / 1000; // seconds, clamp to avoid jumps
+    const dt = Math.min(50, t - lastT) / 1000;
     lastT = t;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    for (const b of boards) {
-      // Spawn pacing
-      if (b.state === "filling" && t > b.nextSpawnAt) {
-        // Don't let too many pucks be in flight at once.
-        const inFlight = b.pucks.filter(p => p.y < (p.targetRow + 0.5) * CELL).length;
-        if (inFlight < 2) spawnPuckOn(b);
-        b.nextSpawnAt = t + 700 + Math.random() * 900;
-      }
+    // Faint plastic frame tint over the whole viewport (suggests Connect-4 board)
+    ctx.fillStyle = FRAME_TINT;
+    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
 
-      // Update falling pucks
-      for (const p of b.pucks) {
-        const targetY = (p.targetRow + 0.5) * CELL;
-        if (p.y < targetY) {
-          p.y = Math.min(p.y + 120 * dt, targetY);
-          if (p.y >= targetY && b.grid[p.targetRow][p.col] === 0) {
-            b.grid[p.targetRow][p.col] = p.player;
-          }
-        }
-      }
-      // Settled pucks live in the grid; drop them from the falling list once seated.
-      b.pucks = b.pucks.filter(p => p.y < (p.targetRow + 0.5) * CELL);
+    // --- Update board ---
+    if (board.state === "filling" && t > board.nextSpawnAt) {
+      const inFlight = board.pucks.filter(p => !p.settled).length;
+      if (inFlight < 2) spawnPuck(t);
+      board.nextSpawnAt = t + 950 + Math.random() * 800;
+    }
 
-      // Transition to "glowing" when full
-      if (b.state === "filling" && isFull(b.grid)) {
-        const lines = findWinningLines(b.grid);
-        b.glowingLines = lines.map(l => ({ ...l, until: t + 1400 }));
-        b.state = "glowing";
-        b.sweepStart = t + 1400;
+    for (const p of board.pucks) {
+      if (p.settled) {
+        if (p.bounceT > 0) p.bounceT = Math.max(0, p.bounceT - dt);
+        continue;
       }
-      if (b.state === "glowing" && t >= b.sweepStart) {
-        b.state = "sweeping";
-        b.sweepStart = t;
+      // Trail history
+      p.trail.push(p.y);
+      if (p.trail.length > 4) p.trail.shift();
+      // Gravity
+      p.vy += cellH * 1.4 * dt;
+      p.y += p.vy * dt;
+      const targetY = (p.targetRow + 0.5) * cellH;
+      if (p.y >= targetY) {
+        p.y = targetY;
+        p.settled = true;
+        p.bounceT = 0.28;
+        if (board.grid[p.targetRow][p.col] === 0) board.grid[p.targetRow][p.col] = p.player;
       }
-      if (b.state === "sweeping" && t - b.sweepStart > 700) {
-        // Reset
-        b.grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
-        b.pucks = [];
-        b.glowingLines = [];
-        b.state = "filling";
-        b.nextSpawnAt = t + 400;
-      }
+    }
 
-      // Draw board
-      const sweepFrac = b.state === "sweeping" ? Math.min(1, (t - b.sweepStart) / 700) : 0;
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-          const cx = b.x + c * CELL + CELL / 2;
-          const cy = b.y + r * CELL + CELL / 2;
-          // Empty hint dot
-          ctx.beginPath(); ctx.arc(cx, cy, PUCK_R, 0, Math.PI * 2);
-          ctx.fillStyle = EMPTY; ctx.fill();
-          const v = b.grid[r][c];
-          if (!v) continue;
-          // Sweep: pucks fade out top-to-bottom over the duration
-          const fade = b.state === "sweeping"
-            ? Math.max(0, 1 - Math.max(0, (sweepFrac * (ROWS + 2) - r)) / 1.5)
-            : 1;
-          ctx.fillStyle = v === 1
-            ? `rgba(232, 86, 85, ${0.14 * fade})`
-            : `rgba(240, 191, 58, ${0.14 * fade})`;
-          ctx.fill();
-        }
+    // Transition: full → glow → sweep → reset
+    if (board.state === "filling" && isFull(board.grid)) {
+      const lines = findWinningLines(board.grid);
+      board.glowingLines = lines.map(l => ({ ...l, until: t + 2200, born: t }));
+      board.state = "glowing";
+      board.sweepStart = t + 2200;
+    }
+    if (board.state === "glowing" && t >= board.sweepStart) {
+      board.state = "sweeping";
+      board.sweepStart = t;
+    }
+    if (board.state === "sweeping" && t - board.sweepStart > 900) {
+      board.grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+      board.pucks = [];
+      board.glowingLines = [];
+      board.state = "filling";
+      board.nextSpawnAt = t + 500;
+    }
+
+    // --- Draw board ---
+    // Empty holes
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const [cx, cy] = cellCenter(r, c);
+        drawHole(cx, cy);
       }
-      // Falling pucks
-      for (const p of b.pucks) {
-        const cx = b.x + p.col * CELL + CELL / 2;
-        const cy = b.y + p.y;
-        ctx.beginPath(); ctx.arc(cx, cy, PUCK_R, 0, Math.PI * 2);
-        ctx.fillStyle = p.player === 1 ? RED_FAINT : YELLOW_FAINT;
-        ctx.fill();
-      }
-      // Glowing winning lines
-      for (const line of b.glowingLines) {
-        const remaining = line.until - t;
-        if (remaining <= 0) continue;
-        const pulse = 0.35 + 0.45 * Math.sin(t * 0.008);
-        const a = Math.min(1, remaining / 700) * pulse;
-        ctx.strokeStyle = line.color === 1 ? `rgba(232, 86, 85, ${a})` : `rgba(240, 191, 58, ${a})`;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        for (let i = 0; i < line.cells.length; i++) {
-          const [r, c] = line.cells[i];
-          const cx = b.x + c * CELL + CELL / 2;
-          const cy = b.y + r * CELL + CELL / 2;
-          if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+    }
+    // Settled pucks (with sweep fade)
+    const sweepFrac = board.state === "sweeping" ? Math.min(1, (t - board.sweepStart) / 900) : 0;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const v = board.grid[r][c]; if (!v) continue;
+        const [cx, cy] = cellCenter(r, c);
+        // Sweep fade rolls from top to bottom
+        const fade = board.state === "sweeping"
+          ? Math.max(0, 1 - Math.max(0, (sweepFrac * (ROWS + 1.5) - r)) / 1.4)
+          : 1;
+        // Bounce on landed pucks shortly after settle
+        let scale = 1;
+        const matchingFalling = board.pucks.find(p => p.settled && p.bounceT > 0 && p.targetRow === r && p.col === c);
+        if (matchingFalling) {
+          // brief squash/stretch settle
+          const phase = matchingFalling.bounceT / 0.28; // 1→0
+          scale = 1 + Math.sin((1 - phase) * Math.PI) * 0.06;
         }
-        ctx.stroke();
-        // Halo on each cell
+        drawPuck(cx, cy, v, 0.20 * fade, scale);
+      }
+    }
+    // Falling pucks: motion trail + main disc
+    for (const p of board.pucks) {
+      if (p.settled) continue;
+      const cx = p.col * cellW + cellW / 2;
+      // Trail
+      for (let i = 0; i < p.trail.length; i++) {
+        const trailAlpha = 0.18 * ((i + 1) / p.trail.length) * 0.5;
+        drawPuck(cx, p.trail[i], p.player, trailAlpha, 0.92);
+      }
+      drawPuck(cx, p.y, p.player, 0.28, 1);
+    }
+    // 4-in-a-row glow
+    for (const line of board.glowingLines) {
+      const remaining = line.until - t;
+      if (remaining <= 0) continue;
+      const age = (t - line.born) / 1000;
+      const pulse = 0.55 + 0.4 * Math.sin(t * 0.012);
+      const a = Math.min(1, remaining / 800) * pulse;
+      const colHex = line.color === 1 ? RED : BLUE;
+      // Glow line
+      ctx.strokeStyle = hexAlpha(colHex, a * 0.85);
+      ctx.lineWidth = 6;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      for (let i = 0; i < line.cells.length; i++) {
+        const [r, c] = line.cells[i];
+        const [cx, cy] = cellCenter(r, c);
+        if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+      }
+      ctx.stroke();
+      // Halo
+      for (const [r, c] of line.cells) {
+        const [cx, cy] = cellCenter(r, c);
+        const g = ctx.createRadialGradient(cx, cy, puckR * 0.5, cx, cy, puckR * 1.8);
+        g.addColorStop(0, hexAlpha(colHex, a * 0.45));
+        g.addColorStop(1, hexAlpha(colHex, 0));
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(cx, cy, puckR * 1.8, 0, Math.PI * 2); ctx.fill();
+      }
+      // Sparkles emanating from line cells in the first ~0.6s
+      if (age < 0.6) {
+        const sparkA = (0.6 - age) / 0.6;
         for (const [r, c] of line.cells) {
-          const cx = b.x + c * CELL + CELL / 2;
-          const cy = b.y + r * CELL + CELL / 2;
-          ctx.beginPath(); ctx.arc(cx, cy, PUCK_R + 4, 0, Math.PI * 2);
-          ctx.fillStyle = line.color === 1 ? `rgba(232, 86, 85, ${a * 0.5})` : `rgba(240, 191, 58, ${a * 0.5})`;
-          ctx.fill();
+          const [cx, cy] = cellCenter(r, c);
+          for (let i = 0; i < 4; i++) {
+            const ang = age * 4 + i * (Math.PI / 2);
+            const dist = puckR * (1 + age * 3);
+            const sx = cx + Math.cos(ang) * dist;
+            const sy = cy + Math.sin(ang) * dist;
+            ctx.fillStyle = `rgba(255, 255, 255, ${sparkA * 0.6})`;
+            ctx.beginPath(); ctx.arc(sx, sy, 2.5, 0, Math.PI * 2); ctx.fill();
+          }
         }
       }
     }
 
-    // Win-burst pucks
+    // --- Win-burst pucks ---
     if (burstPucks.length) {
       const H = window.innerHeight;
       for (const p of burstPucks) {
         p.vy += p.ay * dt;
+        p.x += p.vx * dt;
         p.y += p.vy * dt;
         p.spin += p.spinRate * dt;
-        const rgb = p.color === RED ? "232, 86, 85" : "240, 191, 58";
-        ctx.fillStyle = `rgba(${rgb}, ${p.alpha})`;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
-        // Slight inner highlight to give discs depth even at low opacity
-        ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha * 0.4})`;
-        ctx.beginPath(); ctx.arc(p.x - p.r * 0.3, p.y - p.r * 0.3, p.r * 0.35, 0, Math.PI * 2); ctx.fill();
+        drawPuck(p.x, p.y, p.player, p.alpha, p.r / puckR);
       }
-      // Cull pucks that fell off-screen
       for (let i = burstPucks.length - 1; i >= 0; i--) {
         if (burstPucks[i].y - burstPucks[i].r > H + 40) burstPucks.splice(i, 1);
       }
