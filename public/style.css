@@ -574,8 +574,7 @@ body.human-wins .cell.piece-human {
   font-size: 14px;
   color: var(--muted);
   min-height: 22px;
-  padding: 6px 12px;
-  border-radius: 6px;
+  padding: 4px 0;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -587,13 +586,13 @@ body.human-wins .cell.piece-human {
   background: currentColor;
   opacity: 0.55;
 }
-.status.thinking { color: var(--yellow-deep); background: rgba(240, 191, 58, 0.14); }
-.status.thinking::before { animation: pulse 1s ease-in-out infinite; }
+.status.claude-turn { color: var(--yellow-deep); }
+.status.claude-turn::before { animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.2; } }
-.status.win-human { color: var(--red-deep); background: rgba(232, 86, 85, 0.14); font-weight: 600; }
-.status.win-claude { color: var(--yellow-deep); background: rgba(240, 191, 58, 0.18); font-weight: 600; }
-.status.draw { color: var(--text); background: var(--surface-2); font-weight: 600; }
-.status.error { color: #b03e3e; background: rgba(176, 62, 62, 0.1); }
+.status.win-human { color: var(--red-deep); font-weight: 600; }
+.status.win-claude { color: var(--yellow-deep); font-weight: 600; }
+.status.draw { color: var(--text); font-weight: 600; }
+.status.error { color: #b03e3e; }
 
 /* ---------- Thinking panel (the notebook — kept) ---------- */
 .thinking {
@@ -613,11 +612,6 @@ body.human-wins .cell.piece-human {
   max-height: 460px;
   position: relative;
 }
-/* Hide the whole thinking section while empty so we don't show a fat blank
-   lined-paper box. The status text under the board carries the "Claude is
-   thinking" cue until actual content streams in. */
-.right-col .section:has(#thinking.empty) { display: none; }
-#thinking.empty { display: none; }
 .thinking::before {
   content: "";
   position: absolute;

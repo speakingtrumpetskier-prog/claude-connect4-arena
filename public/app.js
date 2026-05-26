@@ -113,7 +113,7 @@ function newGame() {
   startTicker();
   render();
   renderTimers();
-  setStatus(state.turn === 1 ? "Your turn" : "Claude's turn", state.turn === 1 ? "" : "thinking");
+  setStatus(state.turn === 1 ? "Your turn" : "Claude's turn", state.turn === 1 ? "" : "claude-turn");
   if (state.turn === 2) requestClaudeMove();
 }
 
@@ -585,7 +585,7 @@ async function requestClaudeMove() {
   if (state.gameOver) return;
   state.pendingClaude = true;
   state.abortController = new AbortController();
-  setStatus("Claude's turn", "thinking");
+  setStatus("Claude's turn", "claude-turn");
   thinkingEl.textContent = "";
   // Keep .empty class — only remove it when real thinking content arrives,
   // so the lined-paper panel doesn't sit blank under the board for several seconds.
@@ -716,7 +716,7 @@ async function requestClaudeCustomMove(humanMove) {
   if (state.gameOver) return;
   state.pendingClaude = true;
   state.abortController = new AbortController();
-  setStatus("Claude's turn", "thinking");
+  setStatus("Claude's turn", "claude-turn");
   thinkingEl.textContent = "";
   thinkingEl.classList.add("empty");
   streamingIndicator.hidden = false;
