@@ -113,7 +113,7 @@ function newGame() {
   startTicker();
   render();
   renderTimers();
-  setStatus(state.turn === 1 ? "Your move." : "Claude moves first…");
+  setStatus(state.turn === 1 ? "Your turn" : "Claude's turn", state.turn === 1 ? "" : "thinking");
   if (state.turn === 2) requestClaudeMove();
 }
 
@@ -585,9 +585,11 @@ async function requestClaudeMove() {
   if (state.gameOver) return;
   state.pendingClaude = true;
   state.abortController = new AbortController();
-  setStatus("Claude is thinking…", "thinking");
+  setStatus("Claude's turn", "thinking");
   thinkingEl.textContent = "";
-  thinkingEl.classList.remove("empty");
+  // Keep .empty class — only remove it when real thinking content arrives,
+  // so the lined-paper panel doesn't sit blank under the board for several seconds.
+  thinkingEl.classList.add("empty");
   streamingIndicator.hidden = false;
   render();
 
@@ -650,7 +652,7 @@ async function requestClaudeMove() {
     if (afterMove()) return;
     maybeFlipGravity();
     render();
-    setStatus("Your move.");
+    setStatus("Your turn");
     return;
   }
   state.history.push({ player: 2, move, landed });
@@ -660,7 +662,7 @@ async function requestClaudeMove() {
   if (afterMove()) return;
   maybeFlipGravity();
   render();
-  setStatus("Your move.");
+  setStatus("Your turn");
 }
 
 // ---------- Game-end celebrations ----------
@@ -714,9 +716,9 @@ async function requestClaudeCustomMove(humanMove) {
   if (state.gameOver) return;
   state.pendingClaude = true;
   state.abortController = new AbortController();
-  setStatus("Claude is thinking…", "thinking");
+  setStatus("Claude's turn", "thinking");
   thinkingEl.textContent = "";
-  thinkingEl.classList.remove("empty");
+  thinkingEl.classList.add("empty");
   streamingIndicator.hidden = false;
   render();
 
@@ -794,7 +796,7 @@ async function requestClaudeCustomMove(humanMove) {
   }
   state.turn = 1;
   render();
-  setStatus("Your move. " + (result.message || ""));
+  setStatus("Your turn. " + (result.message || ""));
 }
 
 async function streamClaude(body, signal) {
@@ -844,6 +846,8 @@ async function streamClaude(body, signal) {
         if (evt.delta?.type === "thinking_delta") {
           thinkingText += evt.delta.thinking || "";
           thinkingEl.textContent = thinkingText;
+          // First real content — unhide the lined-paper panel.
+          if (thinkingText.length > 0) thinkingEl.classList.remove("empty");
           thinkingEl.scrollTop = thinkingEl.scrollHeight;
         } else if (evt.delta?.type === "text_delta") {
           outText += evt.delta.text || "";

@@ -609,10 +609,15 @@ body.human-wins .cell.piece-human {
   color: #2a2924;
   white-space: pre-wrap;
   overflow-y: auto;
-  min-height: 240px;
+  min-height: 80px;
   max-height: 460px;
   position: relative;
 }
+/* Hide the whole thinking section while empty so we don't show a fat blank
+   lined-paper box. The status text under the board carries the "Claude is
+   thinking" cue until actual content streams in. */
+.right-col .section:has(#thinking.empty) { display: none; }
+#thinking.empty { display: none; }
 .thinking::before {
   content: "";
   position: absolute;

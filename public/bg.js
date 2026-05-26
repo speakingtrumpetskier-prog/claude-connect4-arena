@@ -109,9 +109,11 @@ if (!canvas) {
     const lenCells = Math.hypot(dr, dc) || 1;
     const vx = (dc / lenCells) * speed;
     const vy = (dr / lenCells) * speed;
-    // Start one cell outside the entry along the negative direction.
-    const startX = (entryC + 0.5) * cellW - (dc / lenCells) * Math.max(cellW, cellH) * 0.7;
-    const startY = (entryR + 0.5) * cellH - (dr / lenCells) * Math.max(cellW, cellH) * 0.7;
+    // Start well outside the entry along the negative direction so even short
+    // slides (e.g., pieces that land at the entry cell itself) have visible
+    // motion instead of looking like they teleport into place.
+    const startX = (entryC + 0.5) * cellW - (dc / lenCells) * Math.max(cellW, cellH) * 2.0;
+    const startY = (entryR + 0.5) * cellH - (dr / lenCells) * Math.max(cellW, cellH) * 2.0;
     board.pucks.push({
       x: startX, y: startY,
       vx, vy,
