@@ -77,12 +77,11 @@ if (!canvas) {
     board.pucks.push({
       col, targetRow: landRow,
       y: -cellH * 0.5,
-      vy: cellH * 0.6,    // initial speed; accelerates under gravity
+      vy: cellH * 0.55,   // gentle constant-ish speed; no gravity acceleration
       player,
       settled: false,
-      bounceT: 0,         // when > 0, run bounce animation
       bornAt: now,
-      trail: [],          // recent y positions for motion trail
+      trail: [],
     });
   }
 
@@ -92,7 +91,7 @@ if (!canvas) {
 
   // ---------- Drawing helpers ----------
   // Flat pieces — no gradient, no glossy highlight, no visible empty cells.
-  function drawPuck(cx, cy, player, alpha = 0.22, scale = 1) {
+  function drawPuck(cx, cy, player, alpha = 0.32, scale = 1) {
     const r = puckR * scale;
     const baseColor = player === 1 ? RED : BLUE;
     ctx.fillStyle = hexAlpha(baseColor, alpha);
@@ -105,29 +104,42 @@ if (!canvas) {
     return `rgba(${r}, ${g}, ${b}, ${a})`;
   }
 
-  // ---------- Win burst ----------
+  // ---------- Win celebration: kick every settled puck out of the scene ----------
+  // Like a child swept the board: each piece flies off in a random direction
+  // under gravity, leaving the viewport.
   const burstPucks = [];
-  function startBurst(winner) {
+  function startBurst(_winner) {
     const W = window.innerWidth, H = window.innerHeight;
-    // Map game winners (1 = human / red, 2 = claude) to bg colors.
-    // Claude is yellow in main UI but blue in bg theme — keep red vs blue.
-    const dominant = winner === 1 ? 1 : 2;
-    const off = dominant === 1 ? 2 : 1;
-    const n = 110;
-    for (let i = 0; i < n; i++) {
-      burstPucks.push({
-        x: Math.random() * W,
-        y: -40 - Math.random() * H * 0.6,
-        vy: 80 + Math.random() * 160,
-        vx: (Math.random() - 0.5) * 60,
-        ay: 280,
-        r: puckR * (0.5 + Math.random() * 0.55),
-        player: Math.random() < 0.78 ? dominant : off,
-        alpha: 0.28 + Math.random() * 0.22,
-        spin: Math.random() * Math.PI * 2,
-        spinRate: (Math.random() - 0.5) * 6,
-      });
+    const cxScene = W / 2, cyScene = H * 0.55;
+    // Capture every settled puck on the board and convert into a flying particle.
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const v = board.grid[r][c]; if (!v) continue;
+        const [px, py] = cellCenter(r, c);
+        // Velocity points outward from the scene center, with a strong upward kick.
+        const dx = px - cxScene, dy = py - cyScene;
+        const dist = Math.max(1, Math.hypot(dx, dy));
+        const outX = dx / dist, outY = dy / dist;
+        const speed = 380 + Math.random() * 320;
+        burstPucks.push({
+          x: px, y: py,
+          vx: outX * speed + (Math.random() - 0.5) * 220,
+          vy: outY * speed * 0.4 - (380 + Math.random() * 280),  // strong upward bias
+          ay: 980,
+          r: puckR,
+          player: v,
+          alpha: 0.32,
+          spin: 0,
+          spinRate: (Math.random() - 0.5) * 14,
+        });
+      }
     }
+    // Empty the board and let it start refilling slowly after a beat.
+    board.grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+    board.pucks = [];
+    board.glowingLines = [];
+    board.state = "filling";
+    board.nextSpawnAt = performance.now() + 1800;
   }
   window.bgBurst = startBurst;
 
@@ -146,21 +158,16 @@ if (!canvas) {
     }
 
     for (const p of board.pucks) {
-      if (p.settled) {
-        if (p.bounceT > 0) p.bounceT = Math.max(0, p.bounceT - dt);
-        continue;
-      }
-      // Trail history
+      if (p.settled) continue;
+      // Trail history (subtle motion blur)
       p.trail.push(p.y);
-      if (p.trail.length > 4) p.trail.shift();
-      // Gravity
-      p.vy += cellH * 1.4 * dt;
+      if (p.trail.length > 3) p.trail.shift();
+      // Gentle constant downward velocity; no acceleration.
       p.y += p.vy * dt;
       const targetY = (p.targetRow + 0.5) * cellH;
       if (p.y >= targetY) {
         p.y = targetY;
         p.settled = true;
-        p.bounceT = 0.28;
         if (board.grid[p.targetRow][p.col] === 0) board.grid[p.targetRow][p.col] = p.player;
       }
     }
@@ -185,25 +192,16 @@ if (!canvas) {
     }
 
     // --- Draw board ---
-    // Settled pucks (with sweep fade) — no visible empty cells; pucks just settle into invisible spots.
+    // Settled pucks (with sweep fade) — no visible empty cells, no bounce on settle.
     const sweepFrac = board.state === "sweeping" ? Math.min(1, (t - board.sweepStart) / 900) : 0;
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const v = board.grid[r][c]; if (!v) continue;
         const [cx, cy] = cellCenter(r, c);
-        // Sweep fade rolls from top to bottom
         const fade = board.state === "sweeping"
           ? Math.max(0, 1 - Math.max(0, (sweepFrac * (ROWS + 1.5) - r)) / 1.4)
           : 1;
-        // Bounce on landed pucks shortly after settle
-        let scale = 1;
-        const matchingFalling = board.pucks.find(p => p.settled && p.bounceT > 0 && p.targetRow === r && p.col === c);
-        if (matchingFalling) {
-          // brief squash/stretch settle
-          const phase = matchingFalling.bounceT / 0.28; // 1→0
-          scale = 1 + Math.sin((1 - phase) * Math.PI) * 0.06;
-        }
-        drawPuck(cx, cy, v, 0.20 * fade, scale);
+        drawPuck(cx, cy, v, 0.32 * fade, 1);
       }
     }
     // Falling pucks: motion trail + main disc
